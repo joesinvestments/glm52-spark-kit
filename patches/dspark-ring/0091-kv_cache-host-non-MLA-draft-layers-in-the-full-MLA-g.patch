@@ -1,0 +1,101 @@
+From 2f2e04b229e8be3aa6cc38c374677db7a247f62f Mon Sep 17 00:00:00 2001
+From: bird <6666242+bird@users.noreply.github.com>
+Date: Wed, 8 Jul 2026 17:09:16 -0400
+Subject: [PATCH] kv_cache: host non-MLA draft layers in the full-MLA group at
+ DCP=1
+
+Wide full-attention draft layers (DSpark/DFlash beside a DeepseekV4-style
+target) previously formed their own KV group, where every block id pays
+for every other group and full-length drafts roughly double the id count
+(131k went from a real ~8 GiB to a computed 61.9 GiB). At DCP=1 with a
+shared block size the draft can ride the full-MLA group block table
+instead: same ids, draft pages as extra arena buckets. Also route
+non-replicated draft specs (previously dropped at DCP=1) and add
+VLLM_KV_SKIP_LAYERS_DTYPE so skip-quant layers can pick fp8 over bf16.
+---
+ .../layers/attention/attention.py             |  8 ++++-
+ vllm/v1/core/kv_cache_utils.py                | 33 +++++++++++++++++--
+ 2 files changed, 37 insertions(+), 4 deletions(-)
+
+diff --git a/vllm/model_executor/layers/attention/attention.py b/vllm/model_executor/layers/attention/attention.py
+index 2a52e72..d95add1 100644
+--- a/vllm/model_executor/layers/attention/attention.py
++++ b/vllm/model_executor/layers/attention/attention.py
+@@ -279,7 +279,13 @@ class Attention(nn.Module, AttentionLayerBase):
+             if str(layer_idx) in cache_config.kv_cache_dtype_skip_layers:
+                 skip = True
+             if skip:
+-                kv_cache_dtype = "auto"
++                import os as _os
++
++                # Default "auto" (bf16). VLLM_KV_SKIP_LAYERS_DTYPE=fp8 halves
++                # skipped-layer KV (e.g. the wide DSpark draft) at scale 1.0.
++                kv_cache_dtype = _os.environ.get(
++                    "VLLM_KV_SKIP_LAYERS_DTYPE", "auto"
++                )
+                 calculate_kv_scales = False
+             logger.debug(
+                 "Layer %s: kv_cache_dtype=%s, sliding_window=%s",
+diff --git a/vllm/v1/core/kv_cache_utils.py b/vllm/v1/core/kv_cache_utils.py
+index 0d763d0..c082dd6 100644
+--- a/vllm/v1/core/kv_cache_utils.py
++++ b/vllm/v1/core/kv_cache_utils.py
+@@ -1509,6 +1509,13 @@ def group_and_unify_kv_cache_specs(
+     ] = defaultdict(dict)
+     # dcp_replicated non-MLA groups (e.g. the DFlash draft), keyed by block_size.
+     grouped_repl_specs: dict[tuple[int], dict[str, KVCacheSpec]] = defaultdict(dict)
++    # Non-MLA full-attention drafts without DCP replication (DFlash/DSpark at
++    # DCP=1). Ideally these ride the full-MLA group's block table: every block
++    # id then covers the same token range in target and draft layers, and the
++    # draft pages become extra per-block arena buckets. A separate group would
++    # roughly double the block-id count for full-length sequences, with every
++    # extra id paying for every other group's slots.
++    draft_full_specs: dict[str, KVCacheSpec] = {}
+     # NOTE: Here we group SWA layers by (block_size, sliding_window,
+     # dcp_sharded), which separates SWA layers, C4I+C4A layers, and C128A
+     # layers into different groups.
+@@ -1521,6 +1528,24 @@ def group_and_unify_kv_cache_specs(
+             mla_specs[name] = spec
+         elif getattr(spec, "dcp_replicated", False):
+             grouped_repl_specs[(spec.block_size,)][name] = spec
++        elif isinstance(spec, FullAttentionSpec):
++            draft_full_specs[name] = spec
++
++    if draft_full_specs and mla_specs:
++        mla_block = next(iter(mla_specs.values())).block_size
++        merged = dict(mla_specs)
++        merged.update(draft_full_specs)
++        if (
++            all(s.block_size == mla_block for s in draft_full_specs.values())
++            and UniformTypeKVCacheSpecs.from_specs(merged) is not None
++        ):
++            mla_specs = merged
++        else:
++            for name, spec in draft_full_specs.items():
++                grouped_repl_specs[(spec.block_size,)][name] = spec
++    elif draft_full_specs:
++        for name, spec in draft_full_specs.items():
++            grouped_repl_specs[(spec.block_size,)][name] = spec
+ 
+     if len(mla_specs) == 0:
+         # No full-MLA group to anchor the DeepseekV4 layout; let the generic
+@@ -1582,11 +1607,13 @@ def _get_kv_cache_groups_uniform_groups(
+     assert len(grouped_specs) > 0 and all(
+         isinstance(spec, UniformTypeKVCacheSpecs) for spec in grouped_specs
+     )
+-    # For now, we restrict the first grouped_spec to be UniformTypeKVCacheSpecs
+-    # containing only MLAAttentionSpec.
++    # The first grouped_spec anchors the layout: MLAAttentionSpec layers,
++    # optionally joined by same-block-size full-attention draft layers
++    # (DFlash/DSpark at DCP=1) that ride the same block table and appear as
++    # extra page-size buckets in the arena.
+     full_mla_spec = grouped_specs[0]
+     assert all(
+-        isinstance(spec, MLAAttentionSpec)
++        isinstance(spec, (MLAAttentionSpec, FullAttentionSpec))
+         for spec in full_mla_spec.kv_cache_specs.values()
+     )
+     full_mla_group = KVCacheGroupSpec(
+-- 
+2.50.1 (Apple Git-155)
+

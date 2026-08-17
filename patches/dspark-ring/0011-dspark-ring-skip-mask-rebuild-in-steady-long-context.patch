@@ -1,0 +1,65 @@
+From 2dc1673cf91fff6edf6cb06107a8c22433dfcd85 Mon Sep 17 00:00:00 2001
+From: bird <6666242+bird@users.noreply.github.com>
+Date: Thu, 9 Jul 2026 09:31:18 -0400
+Subject: [PATCH 11/17] dspark ring: skip mask rebuild in steady long-context
+ state
+
+Once every active request exceeds W (+gamma slack via the host-side
+seq-len upper bound, no sync) the window mask is permanently all-zero;
+skip the per-step where+scatter for the entire deep-context regime.
+---
+ .../gpu/spec_decode/dflash/speculator.py      | 30 ++++++++++++++-----
+ 1 file changed, 22 insertions(+), 8 deletions(-)
+
+diff --git a/vllm/v1/worker/gpu/spec_decode/dflash/speculator.py b/vllm/v1/worker/gpu/spec_decode/dflash/speculator.py
+index 0f6b8d7..aece9a2 100644
+--- a/vllm/v1/worker/gpu/spec_decode/dflash/speculator.py
++++ b/vllm/v1/worker/gpu/spec_decode/dflash/speculator.py
+@@ -123,6 +123,7 @@ class DFlashSpeculator(DraftModelSpeculator):
+                 self.max_num_tokens, dtype=torch.long, device=device
+             )
+             self._ring_arange_w = torch.arange(w, device=device)
++            self._ring_mask_steady = False
+             self._ring_zero = torch.zeros((), dtype=self.dtype, device=device)
+             self._ring_neg_inf = torch.full(
+                 (), float("-inf"), dtype=self.dtype, device=device
+@@ -477,15 +478,28 @@ class DFlashSpeculator(DraftModelSpeculator):
+                 )
+             )
+             DSPARK_RING_CTX.num_ctx_tokens = num_target_tokens
+-            valid = torch.clamp(
+-                input_batch.seq_lens[:num_r].to(torch.long), max=w
++            # Steady-state long-context: once every active request is deeper
++            # than W (+gamma slack on the host-side upper bound), the window
++            # mask is all-zeros permanently - skip the rebuild entirely.
++            min_bound = int(
++                input_batch.seq_lens_cpu_upper_bound[:num_r].min()
+             )
+-            win_mask = torch.where(
+-                self._ring_arange_w[None, :] < valid[:, None],
+-                self._ring_zero,
+-                self._ring_neg_inf,
+-            )
+-            DSPARK_RING_CTX.attn_mask[idx_map, 0, 0, :w] = win_mask
++            if not (
++                self._ring_mask_steady
++                and min_bound > w + self.num_query_per_req
++            ):
++                valid = torch.clamp(
++                    input_batch.seq_lens[:num_r].to(torch.long), max=w
++                )
++                win_mask = torch.where(
++                    self._ring_arange_w[None, :] < valid[:, None],
++                    self._ring_zero,
++                    self._ring_neg_inf,
++                )
++                DSPARK_RING_CTX.attn_mask[idx_map, 0, 0, :w] = win_mask
++                self._ring_mask_steady = (
++                    min_bound > w + self.num_query_per_req
++                )
+         else:
+             assert self.draft_kv_cache_group_id >= 0
+             # Support multiple draft KV cache groups by preparing inputs once
+-- 
+2.50.1 (Apple Git-155)
+

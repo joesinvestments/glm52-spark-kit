@@ -1,0 +1,29 @@
+From 391d3360bf4a0ccb25ba841e30a71fe3c9357b52 Mon Sep 17 00:00:00 2001
+From: bird <6666242+bird@users.noreply.github.com>
+Date: Thu, 9 Jul 2026 08:14:23 -0400
+Subject: [PATCH 09/17] dflash attention: quant-aware qkv projection in draft
+ forward
+
+Raw F.linear on packed fp8 draft weights fails (transposed storage);
+route through the quant method, identical GEMM for plain bf16.
+---
+ vllm/model_executor/models/qwen3_dflash.py | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/vllm/model_executor/models/qwen3_dflash.py b/vllm/model_executor/models/qwen3_dflash.py
+index 48badd7..e3409c9 100644
+--- a/vllm/model_executor/models/qwen3_dflash.py
++++ b/vllm/model_executor/models/qwen3_dflash.py
+@@ -300,7 +300,8 @@ class DFlashQwen3Attention(nn.Module):
+         with the context K/V from the target model's hidden states. This forward op
+         computes attention for the query tokens only.
+         See also: precompute_and_store_context_kv"""
+-        qkv = F.linear(hidden_states, self.qkv_proj.weight, self.qkv_proj.bias)
++        # Quant-aware projection (raw F.linear breaks on packed fp8 weights).
++        qkv, _ = self.qkv_proj(hidden_states)
+         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+ 
+         # Per-head RMSNorm
+-- 
+2.50.1 (Apple Git-155)
+

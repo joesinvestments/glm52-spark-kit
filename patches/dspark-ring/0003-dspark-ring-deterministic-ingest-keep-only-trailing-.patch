@@ -1,0 +1,46 @@
+From 7c6ad9e2c11d6d390897073c4eb1fef2813a2cca Mon Sep 17 00:00:00 2001
+From: bird <6666242+bird@users.noreply.github.com>
+Date: Thu, 9 Jul 2026 02:35:05 -0400
+Subject: [PATCH 03/17] dspark ring: deterministic ingest - keep only
+ trailing-W per row
+
+Chunked prefill scatters >W tokens per step; slot wraparound made
+duplicate indices race (undefined winner), leaving the ring a mix of the
+last few windows instead of the last W tokens. Filter to each row
+trailing W positions first: consecutive positions map to unique slots.
+---
+ vllm/model_executor/models/qwen3_dflash.py | 18 +++++++++++++++---
+ 1 file changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/vllm/model_executor/models/qwen3_dflash.py b/vllm/model_executor/models/qwen3_dflash.py
+index 06fea39..0fb447a 100644
+--- a/vllm/model_executor/models/qwen3_dflash.py
++++ b/vllm/model_executor/models/qwen3_dflash.py
+@@ -333,9 +333,21 @@ class DFlashQwen3Attention(nn.Module):
+     ) -> None:
+         self._ensure_ring(k.device, k.dtype)
+         w = self._ring_window
+-        slots = positions.to(torch.long).remainder(w)
+-        kk = k.view(-1, self.num_kv_heads, self.head_dim)
+-        vv = v.view(-1, self.num_kv_heads, self.head_dim)
++        pos = positions.to(torch.long)
++        # A prefill chunk can exceed W, wrapping slots several times within one
++        # scatter; duplicate indices make the write order undefined. Keep only
++        # each row's trailing W positions - any W consecutive positions map to
++        # unique slots, so the scatter is deterministic and the ring ends up
++        # holding exactly the last W context tokens per row.
++        row_max = torch.zeros(
++            self.ring_k.shape[0], dtype=pos.dtype, device=pos.device
++        )
++        row_max.scatter_reduce_(0, rows, pos, reduce="amax", include_self=False)
++        keep = pos > (row_max[rows] - w)
++        rows = rows[keep]
++        slots = pos[keep].remainder(w)
++        kk = k.view(-1, self.num_kv_heads, self.head_dim)[keep]
++        vv = v.view(-1, self.num_kv_heads, self.head_dim)[keep]
+         self.ring_k[rows, slots] = kk
+         self.ring_v[rows, slots] = vv
+ 
+-- 
+2.50.1 (Apple Git-155)
+

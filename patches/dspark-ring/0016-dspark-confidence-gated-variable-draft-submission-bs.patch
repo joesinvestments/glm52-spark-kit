@@ -1,0 +1,202 @@
+From ecd43757596aff73e313e48e6ac7e2dda776e130 Mon Sep 17 00:00:00 2001
+From: bird <6666242+bird@users.noreply.github.com>
+Date: Fri, 10 Jul 2026 13:25:55 -0400
+Subject: [PATCH 16/17] dspark: confidence-gated variable draft submission
+ (bs=1)
+
+Wire the trained-but-unused confidence head: on low predicted acceptance
+of the first draft position, submit 1 draft token instead of n_spec
+(verify width 2 vs 4 - both power-of-2 cudagraph sizes). Per-request
+draft lengths flow to the scheduler through DraftTokensHandler
+placeholder lists; bs==1 only, keeping per-step width uniform.
+Env: VLLM_DSPARK_CONF_GATE / _THRESH (logit) / _LOG.
+---
+ vllm/model_executor/models/qwen3_dspark.py    | 25 ++++++++++-
+ vllm/v1/worker/gpu/model_runner.py            |  6 +++
+ .../gpu/spec_decode/dspark/speculator.py      | 41 +++++++++++++++++++
+ vllm/v1/worker/gpu/spec_decode/utils.py       | 25 ++++++++++-
+ 4 files changed, 95 insertions(+), 2 deletions(-)
+
+diff --git a/vllm/model_executor/models/qwen3_dspark.py b/vllm/model_executor/models/qwen3_dspark.py
+index 2198197..f7d816b 100644
+--- a/vllm/model_executor/models/qwen3_dspark.py
++++ b/vllm/model_executor/models/qwen3_dspark.py
+@@ -90,6 +90,18 @@ class Qwen3DSparkModel(DFlashQwen3Model):
+             config.markov_rank,
+             prefix=maybe_prefix(prefix, "markov_head"),
+         )
++        # Confidence head (per-draft-position acceptance predictor). Wired
++        # only when VLLM_DSPARK_CONF_GATE is set; weights come from the
++        # checkpoint (confidence_head.proj.{weight,bias}).
++        import os as _os
++        import torch.nn as _nn
++        if _os.environ.get("VLLM_DSPARK_CONF_GATE"):
++            self.confidence_head = _nn.Module()
++            self.confidence_head.proj = _nn.Linear(
++                config.hidden_size + config.markov_rank, 1, bias=True
++            )
++        else:
++            self.confidence_head = None
+ 
+ 
+ class Qwen3DSparkForCausalLM(DFlashQwen3ForCausalLM):
+@@ -146,6 +158,14 @@ class Qwen3DSparkForCausalLM(DFlashQwen3ForCausalLM):
+     def markov_bias(self, markov_embed: torch.Tensor) -> torch.Tensor:
+         return self.model.markov_head.bias(markov_embed, self.logits_processor)
+ 
++    def confidence_logit(
++        self, hidden: torch.Tensor, markov_embed: torch.Tensor
++    ) -> torch.Tensor:
++        # Same input layout the head was trained with: cat([h, markov_embed]).
++        proj = self.model.confidence_head.proj
++        x = torch.cat([hidden, markov_embed], dim=-1).to(proj.weight.dtype)
++        return proj(x).squeeze(-1).float()
++
+     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]):
+         model_weights = {}
+         includes_embed_tokens = False
+@@ -173,7 +193,10 @@ class Qwen3DSparkForCausalLM(DFlashQwen3ForCausalLM):
+         # confidence_head is not wired into inference yet; skip its weights.
+         # embed_tokens / lm_head are optional; when omitted they are shared from
+         # the target by load_dspark_model, so skip the unloaded params here.
+-        skip_substrs = ["mask_embedding", "confidence_head"]
++        import os as _os
++        skip_substrs = ["mask_embedding"]
++        if not _os.environ.get("VLLM_DSPARK_CONF_GATE"):
++            skip_substrs.append("confidence_head")
+         if not includes_embed_tokens:
+             skip_substrs.append("embed_tokens")
+         if not includes_lm_head:
+diff --git a/vllm/v1/worker/gpu/model_runner.py b/vllm/v1/worker/gpu/model_runner.py
+index 792a9ec..87233f5 100644
+--- a/vllm/v1/worker/gpu/model_runner.py
++++ b/vllm/v1/worker/gpu/model_runner.py
+@@ -1583,9 +1583,15 @@ class GPUModelRunner(LoRAModelRunnerMixin):
+             with record_function_or_nullcontext(
+                 f"vllm:v2/target/{phase}/set_draft_tokens"
+             ):
++                _lens = None
++                if getattr(self.speculator, "conf_gate_active", False):
++                    _lens = self.speculator.draft_lens[
++                        : len(input_batch.req_ids)
++                    ]
+                 self.draft_tokens_handler.set_draft_tokens(
+                     input_batch,
+                     self.req_states.draft_tokens[input_batch.idx_mapping],
++                    draft_lens=_lens,
+                 )
+ 
+         # Post-step KV connector related operations.
+diff --git a/vllm/v1/worker/gpu/spec_decode/dspark/speculator.py b/vllm/v1/worker/gpu/spec_decode/dspark/speculator.py
+index 0236017..fc1b7b3 100644
+--- a/vllm/v1/worker/gpu/spec_decode/dspark/speculator.py
++++ b/vllm/v1/worker/gpu/spec_decode/dspark/speculator.py
+@@ -65,6 +65,22 @@ class DSparkSpeculator(DFlashSpeculator):
+             self.num_speculative_steps, dtype=torch.int32, device=device
+         )
+ 
++        import os as _os
++        self.conf_gate_active = bool(_os.environ.get("VLLM_DSPARK_CONF_GATE"))
++        self._conf_thresh = float(
++            _os.environ.get("VLLM_DSPARK_CONF_THRESH", "-1e9")
++        )
++        self._conf_log = int(_os.environ.get("VLLM_DSPARK_CONF_LOG", "0"))
++        self._conf_step = 0
++        # Per-request submitted-draft length (scheduler consumes via the
++        # DraftTokensHandler placeholder lists). Full length by default.
++        self.draft_lens = torch.full(
++            (self.max_num_reqs,),
++            self.num_speculative_steps,
++            dtype=torch.int32,
++            device=device,
++        )
++
+         self._anchor_idx = (
+             torch.arange(self.max_num_reqs, dtype=torch.int64, device=device)
+             * self.num_query_per_req
+@@ -116,6 +132,31 @@ class DSparkSpeculator(DFlashSpeculator):
+         # read via the precomputed persistent index (fixed buffer for capture).
+         prev = self.input_buffers.input_ids[self._anchor_idx[:num_reqs]]
+ 
++        # Confidence gate: on low predicted acceptance of the FIRST draft
++        # position, submit only 1 draft token (verify width 2 instead of
++        # 1 + n_spec; both power-of-2). bs==1 only - keeps per-step width
++        # uniform, sidestepping ragged-batch paths.
++        self.draft_lens[:num_reqs] = n_spec
++        if (
++            self.conf_gate_active
++            and num_reqs == 1
++            and self.model.model.confidence_head is not None
++        ):
++            h1 = sample_hidden.view(num_reqs, n_spec, -1)[:, 0]
++            me0 = self.model.markov_embed(prev)
++            logit = self.model.confidence_logit(h1, me0)
++            self.draft_lens[:num_reqs] = torch.where(
++                logit >= self._conf_thresh,
++                torch.full_like(self.draft_lens[:num_reqs], n_spec),
++                torch.ones_like(self.draft_lens[:num_reqs]),
++            )
++            if self._conf_log:
++                self._conf_step += 1
++                if self._conf_step % self._conf_log == 0:
++                    v = float(logit[0])
++                    g = int(self.draft_lens[0])
++                    print(f"[conf-gate] logit={v:+.3f} len={g}", flush=True)
++
+         for i in range(n_spec):
+             # Sequential stage: Markov bias from the previously sampled token.
+             markov_embed = self.model.markov_embed(prev)
+diff --git a/vllm/v1/worker/gpu/spec_decode/utils.py b/vllm/v1/worker/gpu/spec_decode/utils.py
+index 89d46a7..7e9be91 100644
+--- a/vllm/v1/worker/gpu/spec_decode/utils.py
++++ b/vllm/v1/worker/gpu/spec_decode/utils.py
+@@ -17,12 +17,25 @@ class DraftTokensHandler:
+         self.req_ids: list[str] = []
+         self.draft_tokens_np: np.ndarray | None = None
+         self.num_draft_tokens: int = 0
++        self.lens_event = torch.cuda.Event()
++        self.draft_lens_np = None
+ 
+     def set_draft_tokens(
+-        self, input_batch: InputBatch, draft_tokens: torch.Tensor
++        self,
++        input_batch: InputBatch,
++        draft_tokens: torch.Tensor,
++        draft_lens: torch.Tensor | None = None,
+     ) -> None:
+         self.req_ids = input_batch.req_ids
+         self.num_draft_tokens = draft_tokens.shape[1]
++        self.draft_lens_np = None
++        if draft_lens is not None:
++            current_stream = torch.cuda.current_stream(self.device)
++            self.copy_stream.wait_stream(current_stream)
++            with torch.cuda.stream(self.copy_stream):
++                self.draft_lens_np = async_copy_to_np(draft_lens)
++                draft_lens.record_stream(self.copy_stream)
++                self.lens_event.record()
+         if not input_batch.has_structured_output_reqs:
+             # No draft token validation needs to be performed by
+             # the scheduler for this batch.
+@@ -42,9 +55,19 @@ class DraftTokensHandler:
+             self.copy_event.record()
+ 
+     def get_draft_tokens(self) -> DraftTokenIds | None:
++        lens = None
++        if self.draft_lens_np is not None:
++            self.lens_event.synchronize()
++            lens = [int(x) for x in self.draft_lens_np]
+         if self.draft_tokens_np is not None:
+             self.copy_event.synchronize()
+             draft_token_ids = self.draft_tokens_np.tolist()
++            if lens is not None:
++                draft_token_ids = [
++                    row[:n] for row, n in zip(draft_token_ids, lens)
++                ]
++        elif lens is not None:
++            draft_token_ids = [[-1] * n for n in lens]
+         else:
+             # This case only happens when async scheduling is disabled.
+             draft_token_ids = [[-1] * self.num_draft_tokens for _ in self.req_ids]
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,73 @@
+From 885c4217efa7f7225d99471abdd01e99031e87c8 Mon Sep 17 00:00:00 2001
+From: bird <6666242+bird@users.noreply.github.com>
+Date: Thu, 9 Jul 2026 07:48:23 -0400
+Subject: [PATCH 08/17] dflash ingest: quant-aware fallback for packed draft
+ weights
+
+Online-fp8 drafts store packed weight+scale; raw-slicing them into the
+fused KV GEMM produced garbage shapes. Fall back to per-layer quant-aware
+qkv projections when the weight dtype is not a plain float.
+---
+ vllm/model_executor/models/qwen3_dflash.py | 37 +++++++++++++++++-----
+ 1 file changed, 29 insertions(+), 8 deletions(-)
+
+diff --git a/vllm/model_executor/models/qwen3_dflash.py b/vllm/model_executor/models/qwen3_dflash.py
+index 521fc19..48badd7 100644
+--- a/vllm/model_executor/models/qwen3_dflash.py
++++ b/vllm/model_executor/models/qwen3_dflash.py
+@@ -555,13 +555,27 @@ class DFlashQwen3Model(nn.Module):
+         self._hidden_norm_weight = self.hidden_norm.weight.data
+ 
+         # KV projection weights: [num_layers * 2 * kv_size, hidden_size]
+-        kv_weights = [a.qkv_proj.weight[a.q_size :] for a in layers_attn]
+-        self._fused_kv_weight = torch.cat(kv_weights, dim=0)
+-        if has_bias:
+-            kv_biases = [a.qkv_proj.bias[a.q_size :] for a in layers_attn]
+-            self._fused_kv_bias: torch.Tensor | None = torch.cat(kv_biases, dim=0)
++        if attn0.qkv_proj.weight.dtype in (
++            torch.bfloat16,
++            torch.float16,
++            torch.float32,
++        ):
++            kv_weights = [a.qkv_proj.weight[a.q_size :] for a in layers_attn]
++            self._fused_kv_weight = torch.cat(kv_weights, dim=0)
++            if has_bias:
++                kv_biases = [a.qkv_proj.bias[a.q_size :] for a in layers_attn]
++                self._fused_kv_bias: torch.Tensor | None = torch.cat(
++                    kv_biases, dim=0
++                )
++            else:
++                self._fused_kv_bias = None
+         else:
++            # Quantized draft (e.g. online fp8): weights are packed and cannot
++            # be raw-sliced into one fused GEMM. The ingest falls back to each
++            # layer's own quant-aware qkv projection.
++            self._fused_kv_weight = None
+             self._fused_kv_bias = None
++        self._ingest_layers_attn = layers_attn
+ 
+         # K-norm weights: list of [head_dim] tensors, one per layer.
+         self._k_norm_weights = [a.k_norm.weight.data for a in layers_attn]
+@@ -637,9 +651,16 @@ class DFlashQwen3Model(nn.Module):
+             self._hidden_norm_weight,
+             self._rms_norm_eps,
+         )
+-        all_kv_flat = F.linear(
+-            normed_context_states, self._fused_kv_weight, self._fused_kv_bias
+-        )
++        if self._fused_kv_weight is None:
++            kv_parts = []
++            for a in self._ingest_layers_attn:
++                qkv_out, _ = a.qkv_proj(normed_context_states)
++                kv_parts.append(qkv_out[:, a.q_size :])
++            all_kv_flat = torch.cat(kv_parts, dim=-1)
++        else:
++            all_kv_flat = F.linear(
++                normed_context_states, self._fused_kv_weight, self._fused_kv_bias
++            )
+         # Single contiguous copy that separates K/V and transposes to
+         # layer-major layout.  Result: [2, L, num_ctx, nkv, hd] contiguous.
+         # Indexing dim-0 gives contiguous [L, num_ctx, nkv, hd] for K and V.
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,12 @@
+GLM-5.2 on 4x DGX Spark: source-form runtime kit
+Copyright 2026 joesinvestments
+
+Licensed under the Apache License, Version 2.0.
+
+This kit carries, unchanged or derived, overlay files from:
+  0xdfi, GLM-5.2-Harness-O14-4x-DGX-Spark (Apache-2.0)
+    https://github.com/0xdfi/GLM-5.2-Harness-O14-4x-DGX-Spark
+  vLLM project and contributors (Apache-2.0), base image vllm/vllm-openai:v0.27.0
+  B12X (pip package), sparse-MLA kernels for GB10 / sm_121a
+Per-file provenance, including which files are identical to 0xdfi's and which
+are derived here, is recorded in MANIFEST.json.

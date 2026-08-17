@@ -1,0 +1,37 @@
+From 5b79ea9c24b6a14ac58f1ef83bec9f4a937e5799 Mon Sep 17 00:00:00 2001
+From: bird <6666242+bird@users.noreply.github.com>
+Date: Thu, 9 Jul 2026 07:21:20 -0400
+Subject: [PATCH 07/17] weight_utils: tolerate non-dict hf_overrides in
+ get_quant_config
+
+Draft models loaded via speculative_config quantization (online fp8 of a
+bf16 speculators checkpoint) have no dict hf_overrides; skip the
+override-based branches instead of raising so the online/file-based
+paths apply.
+---
+ vllm/model_executor/model_loader/weight_utils.py | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/vllm/model_executor/model_loader/weight_utils.py b/vllm/model_executor/model_loader/weight_utils.py
+index 39f112b..d3609da 100644
+--- a/vllm/model_executor/model_loader/weight_utils.py
++++ b/vllm/model_executor/model_loader/weight_utils.py
+@@ -295,10 +295,11 @@ def get_quant_config(
+     # hf_overrides
+     hf_overrides = model_config.hf_overrides
+     if not isinstance(hf_overrides, dict):
+-        raise ValueError(
+-            "hf_overrides must be a dict for get_quant_config "
+-            "to get the quantization config from it."
+-        )
++        # Draft model configs (e.g. speculators-format DSpark checkpoints
++        # quantized online via speculative_config["quantization"]) carry no
++        # dict overrides; fall through to the online-quant / file-based paths
++        # instead of failing.
++        hf_overrides = {}
+     quantization_config_file = hf_overrides.get("quantization_config_file", None)
+     if quantization_config_file is not None:
+         if hasattr(quant_cls, "from_config_file"):
+-- 
+2.50.1 (Apple Git-155)
+

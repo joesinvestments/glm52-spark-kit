@@ -1,0 +1,58 @@
+From 08ced786e57f93e47011871165e71a193da674f6 Mon Sep 17 00:00:00 2001
+From: bird <6666242+bird@users.noreply.github.com>
+Date: Thu, 9 Jul 2026 01:04:19 -0400
+Subject: [PATCH 01/17] speculators/dspark: VLLM_DSPARK_DRAFT_WINDOW opt-in
+ windowed draft
+
+Reference DSpark keeps the draft on a small sliding window of context;
+full-context drafting mismatches windowed training and acceptance decays
+with depth (measured 2.05@1.7k -> 0.12@16k). Env-gated until window
+metadata ships in speculators checkpoints.
+---
+ .../transformers_utils/configs/speculators/algos.py | 13 +++++++++++++
+ vllm/v1/core/kv_cache_utils.py                      |  4 +++-
+ 2 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/vllm/transformers_utils/configs/speculators/algos.py b/vllm/transformers_utils/configs/speculators/algos.py
+index ca225cc..35c922c 100644
+--- a/vllm/transformers_utils/configs/speculators/algos.py
++++ b/vllm/transformers_utils/configs/speculators/algos.py
+@@ -141,6 +141,19 @@ def update_dspark(config_dict: dict, pre_trained_config: dict) -> None:
+     # Speculators DSpark uses the 1+N fill-in block (anchor is a bonus token).
+     pre_trained_config["dspark_bonus_anchor"] = True
+ 
++    # Reference DSpark drafts attend over a small sliding window of context
++    # (rafaelcaricio/vllm keeps an internal window cache; the vLLM merge went
++    # full-context, which mismatches windowed training and decays acceptance
++    # with depth). Opt-in override until window metadata ships in checkpoints.
++    import os as _os
++    _win = int(_os.environ.get("VLLM_DSPARK_DRAFT_WINDOW", "0"))
++    if _win > 0:
++        n_layers = pre_trained_config.get("num_hidden_layers") or len(
++            pre_trained_config.get("layer_types") or []
++        ) or 5
++        pre_trained_config["sliding_window"] = _win
++        pre_trained_config["layer_types"] = ["sliding_attention"] * n_layers
++
+     aux_layer_ids = config_dict["aux_hidden_state_layer_ids"]
+     pre_trained_config["eagle_aux_hidden_state_layer_ids"] = aux_layer_ids
+     # DSpark indexes target layers as aux_id - 1 (matches the dense configs).
+diff --git a/vllm/v1/core/kv_cache_utils.py b/vllm/v1/core/kv_cache_utils.py
+index c082dd6..081c54d 100644
+--- a/vllm/v1/core/kv_cache_utils.py
++++ b/vllm/v1/core/kv_cache_utils.py
+@@ -1535,8 +1535,10 @@ def group_and_unify_kv_cache_specs(
+         mla_block = next(iter(mla_specs.values())).block_size
+         merged = dict(mla_specs)
+         merged.update(draft_full_specs)
++        import os as _os
+         if (
+-            all(s.block_size == mla_block for s in draft_full_specs.values())
++            _os.environ.get("VLLM_DRAFT_OWN_KV_GROUP", "0") != "1"
++            and all(s.block_size == mla_block for s in draft_full_specs.values())
+             and UniformTypeKVCacheSpecs.from_specs(merged) is not None
+         ):
+             mla_specs = merged
+-- 
+2.50.1 (Apple Git-155)
+

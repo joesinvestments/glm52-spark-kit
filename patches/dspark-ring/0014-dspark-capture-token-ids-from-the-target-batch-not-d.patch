@@ -1,0 +1,29 @@
+From 8f0dec4b6f846cf8bca5b30f49c5e4eea97d0a0e Mon Sep 17 00:00:00 2001
+From: bird <6666242+bird@users.noreply.github.com>
+Date: Thu, 9 Jul 2026 11:40:53 -0400
+Subject: [PATCH 14/17] dspark capture: token ids from the target batch, not
+ draft buffers
+
+The draft input buffers hold the anchor+mask query block; training labels
+need the target-step token ids (input_batch.input_ids), which align 1:1
+with the captured aux positions.
+---
+ vllm/v1/worker/gpu/spec_decode/dflash/speculator.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/vllm/v1/worker/gpu/spec_decode/dflash/speculator.py b/vllm/v1/worker/gpu/spec_decode/dflash/speculator.py
+index ebb1364..5219e92 100644
+--- a/vllm/v1/worker/gpu/spec_decode/dflash/speculator.py
++++ b/vllm/v1/worker/gpu/spec_decode/dflash/speculator.py
+@@ -444,7 +444,7 @@ class DFlashSpeculator(DraftModelSpeculator):
+                         )
+                         .to(torch.bfloat16)
+                         .cpu(),
+-                        "input_ids": self.input_buffers.input_ids[
++                        "input_ids": input_batch.input_ids[
+                             :num_target_tokens
+                         ]
+                         .detach()
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,347 @@
+{
+ "site_packages_root": "/usr/local/lib/python3.12/dist-packages",
+ "base_image": "vllm-b12x:v0.27.0-pinned (vllm/vllm-openai:v0.27.0-aarch64 + pip install b12x)",
+ "files": [
+  {
+   "overlay_file": "vllm/engine/arg_utils.py",
+   "site_packages_target": "vllm/engine/arg_utils.py",
+   "md5": "4033e6f28cadc04968855161608b0049",
+   "sets": [
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/engine/arg_utils.py"
+  },
+  {
+   "overlay_file": "vllm/config/scheduler.py",
+   "site_packages_target": "vllm/config/scheduler.py",
+   "md5": "5ed5ee8cf9f8b418caf6f831ab2cc19b",
+   "sets": [
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/config/scheduler.py"
+  },
+  {
+   "overlay_file": "vllm/config/speculative.py",
+   "site_packages_target": "vllm/config/speculative.py",
+   "md5": "de13780258bfcd4ef9bcd25f3db2517c",
+   "sets": [
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/config/speculative.py"
+  },
+  {
+   "overlay_file": "vllm/config/vllm.py",
+   "site_packages_target": "vllm/config/vllm.py",
+   "md5": "81732d73c5afb76d08ab65cf5a72288c",
+   "sets": [
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/config/vllm.py"
+  },
+  {
+   "overlay_file": "vllm/v1/worker/gpu/cudagraph_utils.py",
+   "site_packages_target": "vllm/v1/worker/gpu/cudagraph_utils.py",
+   "md5": "bc1cca629b3d17fb176718ff1139306f",
+   "sets": [
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/v1/worker/gpu/cudagraph_utils.py"
+  },
+  {
+   "overlay_file": "vllm/model_executor/models/deepseek_mtp.py",
+   "site_packages_target": "vllm/model_executor/models/deepseek_mtp.py",
+   "md5": "9ce74b3a832309a7d84845d62669888e",
+   "sets": [
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/model_executor/models/deepseek_mtp.py"
+  },
+  {
+   "overlay_file": "vllm/v1/spec_decode/dynamic/acceptance_length.py",
+   "site_packages_target": "vllm/v1/spec_decode/dynamic/acceptance_length.py",
+   "md5": "0920040a9d387bff195a911dfa066340",
+   "sets": [
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/v1/spec_decode/dynamic/acceptance_length.py"
+  },
+  {
+   "overlay_file": "vllm/v1/spec_decode/dynamic/depth_ladder.py",
+   "site_packages_target": "vllm/v1/spec_decode/dynamic/depth_ladder.py",
+   "md5": "01799728e21b3a73635fc68993e6f926",
+   "sets": [
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/v1/spec_decode/dynamic/depth_ladder.py"
+  },
+  {
+   "overlay_file": "vllm/v1/core/sched/scheduler.py",
+   "site_packages_target": "vllm/v1/core/sched/scheduler.py",
+   "md5": "1a56599466c12c849ac84ac9ef5c5bd2",
+   "sets": [
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/v1/core/sched/scheduler.py"
+  },
+  {
+   "overlay_file": "vllm/compilation/b12x_capture.py",
+   "site_packages_target": "vllm/compilation/b12x_capture.py",
+   "md5": "5dcdaa63e05b1325ddb711888085cf9a",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/compilation/b12x_capture.py"
+  },
+  {
+   "overlay_file": "vllm/v1/attention/backends/mla/b12x_mla_sparse.py",
+   "site_packages_target": "vllm/v1/attention/backends/mla/b12x_mla_sparse.py",
+   "md5": "64ef5546a816ed5bc6526d7a565b5f3f",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "derived from 0xdfi overlay, modified here"
+  },
+  {
+   "overlay_file": "vllm/model_executor/layers/attention/builda_bmm_v0.py",
+   "site_packages_target": "vllm/model_executor/layers/attention/builda_bmm_v0.py",
+   "md5": "4ba5d699babc0b1cfbd484fd88f37825",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/model_executor/layers/attention/builda_bmm_v0.py"
+  },
+  {
+   "overlay_file": "vllm/model_executor/layers/attention/builda_bmm_v1.py",
+   "site_packages_target": "vllm/model_executor/layers/attention/builda_bmm_v1.py",
+   "md5": "4fe97b938b0948dd061228a045eccdfe",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/model_executor/layers/attention/builda_bmm_v1.py"
+  },
+  {
+   "overlay_file": "vllm/config/cache.py",
+   "site_packages_target": "vllm/config/cache.py",
+   "md5": "f697993e7ccf0438719124b3dcfed41c",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/config/cache.py"
+  },
+  {
+   "overlay_file": "vllm/v1/attention/ops/deepseek_v4_ops/sm12x_mqa.py",
+   "site_packages_target": "vllm/v1/attention/ops/deepseek_v4_ops/sm12x_mqa.py",
+   "md5": "28e6dd13bbaa05598d5aff5d6285b2c5",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "vLLM/DeepSeek-V4 sm12x lineage (public PRs), carried unchanged"
+  },
+  {
+   "overlay_file": "vllm/v1/attention/ops/deepseek_v4_ops/__init__.py",
+   "site_packages_target": "vllm/v1/attention/ops/deepseek_v4_ops/__init__.py",
+   "md5": "d41d8cd98f00b204e9800998ecf8427e",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "derived from 0xdfi overlay, modified here"
+  },
+  {
+   "overlay_file": "vllm/v1/attention/backends/mla/indexer.py",
+   "site_packages_target": "vllm/v1/attention/backends/mla/indexer.py",
+   "md5": "ab472dba11caf698f077c2059447437c",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "derived from 0xdfi overlay, modified here"
+  },
+  {
+   "overlay_file": "vllm/v1/kv_cache_interface.py",
+   "site_packages_target": "vllm/v1/kv_cache_interface.py",
+   "md5": "3bf505d5caaf7035026327b0f4971f19",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "derived from 0xdfi overlay, modified here"
+  },
+  {
+   "overlay_file": "vllm/model_executor/layers/logits_processor.py",
+   "site_packages_target": "vllm/model_executor/layers/logits_processor.py",
+   "md5": "a35f610b34b9bc8f954ca9a8db91ceae",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/model_executor/layers/logits_processor.py"
+  },
+  {
+   "overlay_file": "vllm/model_executor/layers/fused_moe/experts/marlin_moe.py",
+   "site_packages_target": "vllm/model_executor/layers/fused_moe/experts/marlin_moe.py",
+   "md5": "b7bcdc8239c4857413548681e187b8d9",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/model_executor/layers/fused_moe/experts/marlin_moe.py"
+  },
+  {
+   "overlay_file": "vllm/model_executor/layers/attention/mla_attention.py",
+   "site_packages_target": "vllm/model_executor/layers/attention/mla_attention.py",
+   "md5": "d964ffd099df063b3d7ea8cd4dd634c8",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/model_executor/layers/attention/mla_attention.py"
+  },
+  {
+   "overlay_file": "vllm/v1/attention/backends/mla/nvfp4_ds_mla_writer.py",
+   "site_packages_target": "vllm/v1/attention/backends/mla/nvfp4_ds_mla_writer.py",
+   "md5": "be148c45226f0eb4d5b09b5f57244f1c",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "ours"
+  },
+  {
+   "overlay_file": "vllm/distributed/parallel_state.py",
+   "site_packages_target": "vllm/distributed/parallel_state.py",
+   "md5": "9e9283d47546f07c136c30180bb70fb5",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "derived from 0xdfi overlay, modified here"
+  },
+  {
+   "overlay_file": "vllm/v1/attention/backends/mla/patch_deep_gemm_ops.py",
+   "site_packages_target": "vllm/v1/attention/backends/mla/patch_deep_gemm_ops.py",
+   "md5": "74cf36eff87f97ab5c9761d39ef2fb84",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "vLLM/DeepSeek-V4 sm12x lineage (public PRs), carried unchanged"
+  },
+  {
+   "overlay_file": "vllm/v1/attention/backends/registry.py",
+   "site_packages_target": "vllm/v1/attention/backends/registry.py",
+   "md5": "df49aead5287a8f151963ddecd5ccc2e",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "0xdfi (identical): vllm/vllm/v1/attention/backends/registry.py"
+  },
+  {
+   "overlay_file": "vllm/distributed/device_communicators/shm_broadcast.py",
+   "site_packages_target": "vllm/distributed/device_communicators/shm_broadcast.py",
+   "md5": "3407e99def761bdf1499cf12ad4900db",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "ours"
+  },
+  {
+   "overlay_file": "vllm/v1/attention/backends/mla/sm12x_deep_gemm_fallbacks.py",
+   "site_packages_target": "vllm/v1/attention/backends/mla/sm12x_deep_gemm_fallbacks.py",
+   "md5": "e198dbf2a9170c7196c4073c6b76ab70",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "vLLM/DeepSeek-V4 sm12x lineage (public PRs), carried unchanged"
+  },
+  {
+   "overlay_file": "vllm/v1/attention/backends/mla/sm12x_mqa.py",
+   "site_packages_target": "vllm/v1/attention/backends/mla/sm12x_mqa.py",
+   "md5": "28e6dd13bbaa05598d5aff5d6285b2c5",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "vLLM/DeepSeek-V4 sm12x lineage (public PRs), carried unchanged"
+  },
+  {
+   "overlay_file": "vllm/model_executor/layers/sparse_attn_indexer.py",
+   "site_packages_target": "vllm/model_executor/layers/sparse_attn_indexer.py",
+   "md5": "2d739e36043d07ba6b6939b85f84e8a8",
+   "sets": [
+    "indexer"
+   ],
+   "provenance": "derived from 0xdfi overlay: + DCP>1 top-k merge (_merge_b12x_dcp_topk), multi-request chunks, padded decode, DCP-sharded profile-time scratch reservation"
+  },
+  {
+   "overlay_file": "b12x/integration/sparse_mla_scratch.py",
+   "site_packages_target": "b12x/integration/sparse_mla_scratch.py",
+   "md5": "0a0964882512c3bc81ef8774155d7129",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "derived from 0xdfi overlay, modified here"
+  },
+  {
+   "overlay_file": "vllm/v1/worker/gpu/spec_decode/speculator.py",
+   "site_packages_target": "vllm/v1/worker/gpu/spec_decode/speculator.py",
+   "md5": "f9cc2a510f9925117eeb8935a7a0c29b",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "derived from 0xdfi overlay, modified here"
+  },
+  {
+   "overlay_file": "b12x/attention/indexer/tiled_topk.py",
+   "site_packages_target": "b12x/attention/indexer/tiled_topk.py",
+   "md5": "b99382a527416267c31c3e17daabb57b",
+   "sets": [
+    "indexer"
+   ],
+   "provenance": "0xdfi (identical): b12x/b12x/attention/indexer/tiled_topk.py"
+  },
+  {
+   "overlay_file": "vllm/utils/torch_utils.py",
+   "site_packages_target": "vllm/utils/torch_utils.py",
+   "md5": "73b786cbaf818c5fc9d26b6a051b13cb",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "derived from 0xdfi overlay, modified here"
+  }
+ ]
+}

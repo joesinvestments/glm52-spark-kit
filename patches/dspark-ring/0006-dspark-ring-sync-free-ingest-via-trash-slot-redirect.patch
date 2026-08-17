@@ -1,0 +1,56 @@
+From 3f7b618132d75868e53faeb2dba27d030c12815d Mon Sep 17 00:00:00 2001
+From: bird <6666242+bird@users.noreply.github.com>
+Date: Thu, 9 Jul 2026 04:52:33 -0400
+Subject: [PATCH 06/17] dspark ring: sync-free ingest via trash-slot redirect
+
+Boolean-mask compaction sized its output on host (3 syncs x 5 layers
+per step, py-spy pinned 6/6 samples in ring_ingest). Redirect masked
+writes to an extra slot W instead; reads slice [:W].
+---
+ vllm/model_executor/models/qwen3_dflash.py | 16 +++++++++-------
+ 1 file changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/vllm/model_executor/models/qwen3_dflash.py b/vllm/model_executor/models/qwen3_dflash.py
+index 0fb447a..521fc19 100644
+--- a/vllm/model_executor/models/qwen3_dflash.py
++++ b/vllm/model_executor/models/qwen3_dflash.py
+@@ -280,7 +280,7 @@ class DFlashQwen3Attention(nn.Module):
+             max_reqs = vcfg.scheduler_config.max_num_seqs
+             shape = (
+                 max_reqs,
+-                self._ring_window,
++                self._ring_window + 1,  # slot W = trash bin for masked writes
+                 self.num_kv_heads,
+                 self.head_dim,
+             )
+@@ -344,10 +344,12 @@ class DFlashQwen3Attention(nn.Module):
+         )
+         row_max.scatter_reduce_(0, rows, pos, reduce="amax", include_self=False)
+         keep = pos > (row_max[rows] - w)
+-        rows = rows[keep]
+-        slots = pos[keep].remainder(w)
+-        kk = k.view(-1, self.num_kv_heads, self.head_dim)[keep]
+-        vv = v.view(-1, self.num_kv_heads, self.head_dim)[keep]
++        # No boolean compaction (it forces a host sync to size the result);
++        # out-of-window tokens write to the trash slot W instead. In-window
++        # positions are W consecutive values -> unique slots -> deterministic.
++        slots = torch.where(keep, pos.remainder(w), torch.full_like(pos, w))
++        kk = k.view(-1, self.num_kv_heads, self.head_dim)
++        vv = v.view(-1, self.num_kv_heads, self.head_dim)
+         self.ring_k[rows, slots] = kk
+         self.ring_v[rows, slots] = vv
+ 
+@@ -370,8 +372,8 @@ class DFlashQwen3Attention(nn.Module):
+         kb = k.view(num_rows, gamma, self.num_kv_heads, self.head_dim)
+         vb = v.view(num_rows, gamma, self.num_kv_heads, self.head_dim)
+ 
+-        win_k = self.ring_k[rows]  # [R, W, kv, d]
+-        win_v = self.ring_v[rows]
++        win_k = self.ring_k[rows, :w]  # [R, W, kv, d] (drop trash slot)
++        win_v = self.ring_v[rows, :w]
+         keys = torch.cat([win_k, kb], dim=1)  # [R, W + gamma, kv, d]
+         vals = torch.cat([win_v, vb], dim=1)
+ 
+-- 
+2.50.1 (Apple Git-155)
+
