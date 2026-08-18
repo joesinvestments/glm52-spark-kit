@@ -342,6 +342,28 @@
     "adaptive"
    ],
    "provenance": "derived from 0xdfi overlay, modified here"
+  },
+  {
+   "overlay_file": "vllm/v1/attention/backends/mla/sparse_utils.py",
+   "site_packages_target": "vllm/v1/attention/backends/mla/sparse_utils.py",
+   "md5": "25ece050559afed06e6974d4236e0853",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "vLLM upstream PR #50365 (atomic-free sparse index remap) backported onto v0.27.0; set-identical output verified live"
+  },
+  {
+   "overlay_file": "vllm/model_executor/model_loader/weight_utils.py",
+   "site_packages_target": "vllm/model_executor/model_loader/weight_utils.py",
+   "md5": "ec59b01f17b303e9d6703a40a4821d40",
+   "sets": [
+    "core",
+    "indexer",
+    "adaptive"
+   ],
+   "provenance": "9-line tolerance for non-dict hf_overrides in get_quant_config, from bird/vllm-lil dspark-ring-1m-20260711 (Apache-2.0)"
   }
  ]
 }

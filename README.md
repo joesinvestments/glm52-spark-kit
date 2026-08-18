@@ -1,9 +1,9 @@
 # GLM-5.2 on 4x DGX Spark: source-form runtime kit
 
 Everything needed to run GLM-5.2 (QuantTrio W4A16 / Int8Mix) on four DGX Spark
-nodes (GB10, sm_121a, one GPU per node, RoCEv2) on stock
-`vllm/vllm-openai:v0.27.0-aarch64` plus `pip install b12x`, as a set of overlay
-files mounted over site-packages. No rebuilt image, no private wheels, no donor
+nodes (GB10, sm_121a, one GPU per node, RoCEv2) on stock `vllm/vllm-openai:v0.27.0`
+plus b12x (`images/vllm-b12x.Dockerfile` builds the exact image the launchers call
+`vllm-b12x:v0.27.0-pinned`), as a set of overlay files mounted over site-packages. No rebuilt image, no private wheels, no donor
 binaries. Every file has an md5 and a provenance line in `MANIFEST.json`.
 
 Measured on this fleet, correctness-gated, and reproducible from the launcher in
@@ -60,6 +60,7 @@ MANIFEST.json      every overlay file: site-packages target, md5, sets, provenan
 apply.sh           emits docker -v mounts for a set (core | indexer | adaptive | all)
 verify.sh          md5-checks the overlay on this host or on every host given
 overlays/          files mirrored at their site-packages paths
+images/            Dockerfile for the stock-base serving image (vllm-b12x:v0.27.0-pinned)
 kernels/           the nvfp4 writer (also mounted from overlays/) and its standalone twin
 tests/             byte-identity, CUDA-graph replay, opcheck, DCP pack identity
 launch/            production launcher, retry wrapper, staged experiment launchers
@@ -72,7 +73,7 @@ docs/              RECOMMENDATION, DSPARK, NVFP4_DS_MLA_RECORD, SESSION-2026-08-
 ```bash
 for h in node1 node2 node3 node4; do rsync -a overlays/ $h:/var/tmp/glm52-overlay/; done
 ./verify.sh /var/tmp/glm52-overlay node1 node2 node3 node4     # fails closed on any mismatch
-docker run ... $(./apply.sh core /var/tmp/glm52-overlay) ... vllm/vllm-openai:v0.27.0-aarch64 ...
+docker run ... $(./apply.sh core /var/tmp/glm52-overlay) ... vllm-b12x:v0.27.0-pinned ...
 ```
 
 `launch/launch_gx10.sh` is the full production command (attention backend
