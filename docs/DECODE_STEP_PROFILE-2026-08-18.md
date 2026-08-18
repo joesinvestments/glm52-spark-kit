@@ -15,7 +15,7 @@ tokens per step. Earlier notes that said "~50 ms per step" were wrong; that was 
 ## Where the time goes (C4 window, rank 0; ranks 1-3 within 1%)
 | slice | share | ~ms/step | kernels/step |
 |---|---|---|---|
-| MoE expert GEMMs (Marlin int4 `marlin_moe_wna16::Marlin`, `marlin::Marlin`) | 57-58% | ~115 | ~970 (12 per layer), ~0.12 ms each |
+| MoE expert GEMMs (Marlin int4 `marlin_moe_wna16::Marlin`) + dense int8 linears (`marlin::Marlin`) | 57-58% | ~115 | 2 MoE launches per layer (w13 ~0.9 ms, w2 ~0.45 ms at C4) plus ~4 dense w8a16 launches per layer |
 | NCCL all-reduce (`AllReduce_Sum_bf16_RING_LL`) | 10-11% | ~22 | 158, ~0.14 ms each (~150 KB messages) |
 | NCCL all-gather + send/recv (DCP a2a, indexer gather) | 15% | ~30 | |
 | dense GEMMs (attention projections, lm_head; cutlass wmma bf16, gemvx) | 8% | ~16 | |
@@ -24,18 +24,26 @@ tokens per step. Earlier notes that said "~50 ms per step" were wrong; that was 
 | sampler / MTP misc | <1% | | |
 GPU busy 97% of the window at C4 (92% at C1); idle 3-8%. CUDA graphs are working.
 
-## Reading
-Bandwidth floor for the experts actually touched per step (12 tokens x 8 of 256 experts, int4) is
-~35 ms at C4 and ~11 ms at C1; Marlin spends 115 / 67 ms. The expert path is 3-6x off bandwidth
-because it is launch/latency-bound at small M, not byte-bound. Communication is a quarter of the step
-and also latency-bound (tiny messages on RING_LL). Attention is not the bottleneck at these depths.
+## Reading (corrected the same night; the first version of this file said the expert path was launch-bound, it is not)
+Per layer the expert path is exactly two Marlin MoE launches (w13, w2). With the real dims (256 experts,
+6144 x 2048, int4 g128, TP-sharded 4 ways: ~4.85 MB per touched expert per rank) the C1 window comes
+out at roughly 75-80% of the node's memory bandwidth. The expert kernel is close to the byte floor
+already; a custom small-M expert kernel would buy a fraction of the 57% slice, not multiples.
+The dense int8 linears (`marlin::Marlin` w8a16: q/kv/o projections, shared expert) are 8-20% of the
+step depending on batch and have not been checked against bandwidth yet.
+Communication is a quarter of the step and IS latency-bound: five collectives per layer (two TP
+all-reduces ~60 us, two indexer all-gathers ~85 us for the DCP top-k path, one send/recv ~50 us for the
+DCP KV all-to-all), ~78 x 340 us. Attention itself is 4%.
 
 ## What this points at, in order
-1. Expert parallel for the experts (`--enable-expert-parallel`): 64 whole experts per node, 4x fewer
-   and 4x larger expert GEMMs per step, dispatch/combine a2a instead of the per-layer all-reduce.
-   Attacks both top slices structurally. One boot to find out.
-2. Marlin small-M: fewer launches per layer (grouped/persistent MoE), the builda_bmm line.
-3. NCCL algo/proto sweep for ~150 KB messages on the rails.
+1. Communication fusion on the DSA/DCP path: fuse the two indexer all-gathers, pack the a2a into the
+   same launch, overlap the all-reduce of layer L with the norm/router of L+1. Biggest non-bandwidth
+   slice, no model-quality cost, nobody has done it for DSA on DCP.
+2. Tokens per byte: the experts are bandwidth-bound, so every accepted draft token is free. A drafter
+   finetuned on captures from this exact quant and stack (bird measured +25% on the same body).
+3. Check the dense w8a16 linears against bandwidth at M=3..12; second kernel-shape target if short.
+4. Expert parallel: does not change bytes per node, trades the all-reduces for a dispatch a2a; one cheap
+   boot, not expected to be the win.
 
 Raw traces: 8 files (4 ranks x 2 windows), kept off-repo (127 MB); reproduce with
 `benchmarks/profile/profile_drive.sh` against a server booted with the profiler flag.

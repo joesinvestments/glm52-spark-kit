@@ -110,8 +110,9 @@ Facts a newcomer needs:
 - Full-NVFP4 (nvidia modelopt) boots on the platform image with the CUTLASS FP4 MoE kernel; 107 GB/rank,
   not the decode path (see the AEON hand-back repo, `NVFP4.md`). Pruning is not on the table.
 - Open work, in priority order: the decode-step profile is DONE (`docs/DECODE_STEP_PROFILE-2026-08-18.md`:
-  step ~110-130 ms at C1 / ~200 ms at C4; Marlin MoE 57%, NCCL 25%, attention 4%, idle 3%); next is
-  expert parallel for the experts, then Marlin small-M, then an NCCL algo/proto sweep; a drafter finetuned on captures from this stack (`launch/dspark_ddp_finetune.sh`,
+  step ~110-130 ms at C1 / ~200 ms at C4; expert GEMMs 57% and near the bandwidth floor, NCCL 25% and
+  latency-bound, attention 4%, idle 3%); next is comm fusion on the DSA/DCP path, the drafter finetune,
+  and a bandwidth check of the dense int8 linears; a drafter finetuned on captures from this stack (`launch/dspark_ddp_finetune.sh`,
   capture hook in `overlays/dspark-ring/`); PRs upstream for the DCP-aware indexer and the writer.
 - Companion repos: `spark-fleet-guard` (the failsafes that stopped the power cycles) and
   `glm52-aeon-crossnode-graphs` (the AEON hand-back: platform Dockerfile, cross-node graph finding).
