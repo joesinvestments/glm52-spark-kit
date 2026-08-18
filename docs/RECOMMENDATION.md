@@ -1,5 +1,10 @@
 # GLM-5.2 on 4x DGX Spark: what to run, and why
 
+> Status note (2026-08-18): this document records the DCP=4 decision and the measurements behind it
+> as of the day it was written. The configuration line below is that day's; the current production
+> identity is `launch/launch_gx10.sh` (nvfp4_ds_mla KV, 315,968 context, `--cpu-distributed-timeout-seconds 1800`,
+> `--disable-custom-all-reduce`, persisted JIT caches). The DCP=4-over-DCP=1 reasoning stands unchanged.
+
 ## Update 2026-08-16 (late): production is now nvfp4 at 315,968 context
 
 Production launcher (`launch_gx10.sh`, recovery inherits it): **B12X_MLA_SPARSE +
