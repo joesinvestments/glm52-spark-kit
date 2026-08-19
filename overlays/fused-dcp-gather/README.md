@@ -10,8 +10,9 @@ is ~85 us of ring latency on the RoCE rails. This change makes them ONE all-gath
 - MLA decode: concatenates the raw bytes of `[q | candidates]`, does one `all_gather`, splits per rank,
   finishes the stable top-k into the same buffer, and proceeds with the gathered q.
 
-Same data, same kernels, one transport: results are byte-identical by construction. Removes 78
-collectives per step (~6-7 ms at C1, ~5% of the step). Enabled by `VLLM_FUSED_DCP_GATHER=1`; off = stock.
+Same data, same kernels, one transport. CORRECTION 2026-08-19: GLM-5.2 runs the indexer in only ~22 of
+78 layers per step (the rest reuse the previous layer's top-k, `skip_topk`), so this removes ~22 gathers
+per step, ~2 ms at C1 (~1.5%), not 78. Production trace: 102.7 AllGather/step = 78 q + ~25 indexer. Enabled by `VLLM_FUSED_DCP_GATHER=1`; off = stock.
 
 Files: `overlays/vllm/model_executor/layers/attention/mla_attention.py` (consumer) and the indexer.
 Production mounts the STOCK indexer file (the D-config indexer overlay is not adopted), so the test
@@ -35,3 +36,14 @@ battery vs baseline-32K (35.9 / 11.2 / 566), and a decode-step trace to count Al
   the buffer for that layer (backend metadata, or `skip_topk` layers sharing top-k), or the fp32
   candidates-as-bytes reassembly. Next step: single-layer tensor diff of both paths off the serving
   path before any further boot. Production restored (gate PASS, 38.35 / 11.91 / 601).
+
+## 2026-08-19 03:50 diagnosis so far
+- 4-rank test over the rails (`/var/tmp/gather_equiv.py`): the byte-packed single gather reproduces both
+  gathered tensors exactly on all ranks. The CuTe `stable_topk` returns the same SET of ids as a torch
+  reference but in a run-to-run varying order (fine for attention; it just makes exact-equality tests
+  too strict).
+- Fused-run trace: indexer kernels present at ~22/step as in production; AllGather 81.4/step (= 78 q
+  gathers + ~3), i.e. the ~22 indexer gathers were fused. So the mechanism is right and the divergence
+  is somewhere in what the model reads. Verify mode `VLLM_FUSED_DCP_GATHER=2` now computes the original
+  two-gather result alongside and set-compares per row on-device, logging the first mismatches; one 32K
+  boot with it localizes the bug.
