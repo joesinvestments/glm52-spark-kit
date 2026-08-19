@@ -25,3 +25,13 @@ a wash on a bandwidth-bound step, and it costs KV pool.
 Test plan: 32K, seqs 4, production identity + flag (`launch/champion_fusedgather_32k.sh`), gate x4/x8,
 battery vs baseline-32K (35.9 / 11.2 / 566), and a decode-step trace to count AllGather kernels per step
 (expect 78 fewer). Then 316K, then production, each on the operator's go.
+
+## Test result 2026-08-19 01:02 UTC (32K, seqs 4, DCP4, gmu 0.88)
+- Mechanism confirmed: trace on rank 0 shows AllGather/step 81.4 vs 156 baseline (78 removed), AllReduce
+  158 and SendRecv 78 unchanged.
+- Correctness NOT identical: gate x4 passed, x8 FAILED; greedy acceptance 0.63/step vs 1.15 baseline;
+  per-request decode 8.2 vs 11.2; prefill figure nonsensical (1892). The fused path changes attention
+  results. NOT adoptable as is. Suspects: the deferred top-k finish landing after a consumer already read
+  the buffer for that layer (backend metadata, or `skip_topk` layers sharing top-k), or the fp32
+  candidates-as-bytes reassembly. Next step: single-layer tensor diff of both paths off the serving
+  path before any further boot. Production restored (gate PASS, 38.35 / 11.91 / 601).
