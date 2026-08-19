@@ -80,7 +80,9 @@ def _assert_cutedsl_dcp_merge_supported(
 # forward_mqa. Results are byte-identical (same data, same kernels, one transport);
 # it removes one collective per layer per step. Prefill keeps the immediate gather.
 import os as _os
-FUSED_DCP_GATHER = _os.environ.get("VLLM_FUSED_DCP_GATHER", "0") == "1"
+FUSED_DCP_GATHER = _os.environ.get("VLLM_FUSED_DCP_GATHER", "0") in ("1", "2")
+FUSED_DCP_VERIFY = _os.environ.get("VLLM_FUSED_DCP_GATHER", "0") == "2"
+_FUSED_STATS = {"layer": 0, "checked": 0, "mismatch": 0, "logged": 0}
 _PENDING_DCP_TOPK: dict = {}
 
 
@@ -90,6 +92,16 @@ def dcp_topk_defer(packed: torch.Tensor, topk_indices: torch.Tensor, topk_tokens
     _PENDING_DCP_TOPK["packed"] = packed
     _PENDING_DCP_TOPK["topk_indices"] = topk_indices
     _PENDING_DCP_TOPK["topk_tokens"] = topk_tokens
+    if FUSED_DCP_VERIFY:
+        # reference: the original two-gather path, into a scratch copy
+        from vllm.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
+            stable_topk_from_gathered_candidates_cutedsl,
+        )
+        ref = torch.empty_like(topk_indices)
+        gathered = get_dcp_group().all_gather(packed, dim=1)
+        stable_topk_from_gathered_candidates_cutedsl(gathered, topk_tokens, out=ref)
+        _PENDING_DCP_TOPK["ref"] = ref
+        _PENDING_DCP_TOPK["local_before"] = topk_indices.clone()
 
 
 def dcp_topk_take():
@@ -100,11 +112,27 @@ def dcp_topk_take():
     return d
 
 
-def dcp_topk_finish(gathered_candidates: torch.Tensor, topk_indices: torch.Tensor, topk_tokens: int) -> None:
+def dcp_topk_finish(gathered_candidates: torch.Tensor, topk_indices: torch.Tensor, topk_tokens: int,
+                    ref: torch.Tensor | None = None) -> None:
     from vllm.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
         stable_topk_from_gathered_candidates_cutedsl,
     )
     stable_topk_from_gathered_candidates_cutedsl(gathered_candidates, topk_tokens, out=topk_indices)
+    if FUSED_DCP_VERIFY and ref is not None:
+        # set-compare per row (the kernel's output order is not deterministic)
+        a = torch.sort(topk_indices, dim=-1).values
+        b = torch.sort(ref, dim=-1).values
+        bad = (a != b).any(dim=-1)
+        _FUSED_STATS["checked"] += 1
+        nbad = int(bad.sum().item())
+        if nbad:
+            _FUSED_STATS["mismatch"] += 1
+            if _FUSED_STATS["logged"] < 20:
+                _FUSED_STATS["logged"] += 1
+                r = int(bad.nonzero()[0].item())
+                print(f"[fused-dcp-verify] MISMATCH check#{_FUSED_STATS['checked']} rows_bad={nbad}/{bad.numel()} row{r}: fused_sorted[:6]={a[r,:6].tolist()} ref_sorted[:6]={b[r,:6].tolist()} fused_neg={(topk_indices[r]<0).sum().item()} ref_neg={(ref[r]<0).sum().item()}", flush=True)
+        elif _FUSED_STATS["checked"] % 500 == 0:
+            print(f"[fused-dcp-verify] ok: {_FUSED_STATS['checked']} checks, {_FUSED_STATS['mismatch']} mismatching", flush=True)
 # --- end fused DCP gather ------------------------------------------------------
 
 def _merge_dcp_topk_global(

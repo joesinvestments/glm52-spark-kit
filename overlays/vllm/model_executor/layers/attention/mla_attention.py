@@ -957,7 +957,7 @@ class MLAAttention(nn.Module, AttentionLayerBase):
                             _g = _g.view(_B, _W, _qbytes + _pbytes)
                             _gq = _g[:, :, :_qbytes].reshape(_B, _W * _qbytes).contiguous().view(mqa_q.dtype).view(_B, _W * _qh, _qd)
                             _gp = _g[:, :, _qbytes:].reshape(_B, _W * _pbytes).contiguous().view(torch.float32).view(_B, _W * _pk, 2)
-                            dcp_topk_finish(_gp, _pending["topk_indices"], _pending["topk_tokens"])
+                            dcp_topk_finish(_gp, _pending["topk_indices"], _pending["topk_tokens"], _pending.get("ref"))
                             mqa_q = _gq
                         else:
                             mqa_q = get_dcp_group().all_gather(mqa_q, dim=1)
