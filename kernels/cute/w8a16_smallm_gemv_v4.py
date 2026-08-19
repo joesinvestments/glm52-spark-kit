@@ -20,81 +20,63 @@ MAXM = 4    # compile-time token tile; the harness compiles per M bucket (4/8/16
 LANES = 32
 
 
-ROWS = 8    # rows per warp
+ROWS = 8    # rows per warp (activation loads amortized over ROWS)
 WARPS = 4   # warps per CTA -> 32 rows per CTA
-KS = 2048   # K-slice per CTA (split-K); activation slice staged in smem as fp32: MAXM*KS*4 bytes
-NT = WARPS * LANES
-import cutlass.utils as cutlass_utils
-
-
-class SmemX:
-    pass
-
-
-def _storage_cls():
-    return cute.struct(type("SmemX", (), {"__annotations__": {
-        "x": cute.struct.Align[cute.struct.MemRange[Float32, MAXM * KS], 16]}}))
 
 
 @cute.kernel
-def gemv_kernel(mW: cute.Tensor, mS: cute.Tensor, mX: cute.Tensor, mP: cute.Tensor,
+def gemv_kernel(mW: cute.Tensor, mS: cute.Tensor, mX: cute.Tensor, mY: cute.Tensor,
                 M: Int32, KQ: Int32):
-    # mW: [N, KQ] int64; mS: [N, KQ/16] bf16; mX: [M, 8*KQ] bf16; mP: [NSPLIT, M, N] fp32 partials
+    # mW: [N, KQ] int64 (8 int8 per element); mS: [N, KQ/16] bf16 (group 128 = 16 int64); mX: [M, 8*KQ] bf16; mY: [M, N] bf16
     tidx, _, _ = cute.arch.thread_idx()
-    bidx, bidy, _ = cute.arch.block_idx()      # bidx: row block, bidy: K split
+    bidx, _, _ = cute.arch.block_idx()
     lane = tidx % LANES
     warp = tidx // LANES
     row0 = (bidx * WARPS + warp) * ROWS
-    kbase = bidy * KS                           # element (int8) offset of this split
-    smem = cutlass_utils.SmemAllocator()
-    st = smem.allocate(_storage_cls())
-    s_x = st.x.get_tensor(cute.make_layout((MAXM * KS,), stride=(1,)))
-    # stage activation slice: MAXM x KS fp32
-    for idx in cutlass.range(tidx, MAXM * KS, NT):
-        m = idx // KS
-        kk = idx % KS
-        if m < M:
-            s_x[idx] = Float32(mX[m, kbase + kk])
-        else:
-            s_x[idx] = Float32(0.0)
-    cute.arch.sync_threads()
     acc = cute.make_rmem_tensor((ROWS * MAXM,), Float32)
     for i in cutlass.range_constexpr(ROWS * MAXM):
         acc[i] = Float32(0.0)
-    qbase = kbase // 8                          # int64 index base of this split
-    niter = KS // (LANES * 16)                  # stripes of 512 k per warp
+    xs = cute.make_rmem_tensor((MAXM * 16,), Float32)
+    UNR = 2                              # K-stripes per iteration (loads in flight)
+    niter = KQ // (LANES * 2 * UNR)
     for it in cutlass.range(niter):
-        q0 = qbase + (it * LANES + lane) * 2
-        kl = (it * LANES + lane) * 16           # local k offset in slice
-        gidx = (kbase + kl) // 128
-        wa = cute.make_rmem_tensor((ROWS,), Int64)
-        wb = cute.make_rmem_tensor((ROWS,), Int64)
-        scs = cute.make_rmem_tensor((ROWS,), Float32)
-        for r in cutlass.range_constexpr(ROWS):
-            wa[r] = mW[row0 + r, q0]
-            wb[r] = mW[row0 + r, q0 + 1]
-            scs[r] = Float32(mS[row0 + r, gidx])
-        xs = cute.make_rmem_tensor((MAXM * 16,), Float32)
-        for m in cutlass.range_constexpr(MAXM):
-            for e in cutlass.range_constexpr(16):
-                xs[m * 16 + e] = s_x[m * KS + kl + e]
-        for r in cutlass.range_constexpr(ROWS):
-            b = cute.make_rmem_tensor((16,), Float32)
-            lo = Int32(wa[r] & Int64(0xFFFFFFFF)); hi = Int32(wa[r] >> Int64(32))
-            b[0] = Float32(Int32((lo << 24) >> 24)); b[1] = Float32(Int32((lo << 16) >> 24))
-            b[2] = Float32(Int32((lo << 8) >> 24));  b[3] = Float32(Int32(lo >> 24))
-            b[4] = Float32(Int32((hi << 24) >> 24)); b[5] = Float32(Int32((hi << 16) >> 24))
-            b[6] = Float32(Int32((hi << 8) >> 24));  b[7] = Float32(Int32(hi >> 24))
-            lo = Int32(wb[r] & Int64(0xFFFFFFFF)); hi = Int32(wb[r] >> Int64(32))
-            b[8] = Float32(Int32((lo << 24) >> 24)); b[9] = Float32(Int32((lo << 16) >> 24))
-            b[10] = Float32(Int32((lo << 8) >> 24)); b[11] = Float32(Int32(lo >> 24))
-            b[12] = Float32(Int32((hi << 24) >> 24)); b[13] = Float32(Int32((hi << 16) >> 24))
-            b[14] = Float32(Int32((hi << 8) >> 24)); b[15] = Float32(Int32(hi >> 24))
+        for u in cutlass.range_constexpr(UNR):
+            stripe = it * UNR + u
+            q0 = (stripe * LANES + lane) * 2
+            k0 = q0 * 8
+            gidx = stripe * 4 + lane // 8
             for m in cutlass.range_constexpr(MAXM):
-                d = Float32(0.0)
-                for e in cutlass.range_constexpr(16):
-                    d = d + b[e] * xs[m * 16 + e]
-                acc[r * MAXM + m] = acc[r * MAXM + m] + scs[r] * d
+                if m < M:
+                    for e in cutlass.range_constexpr(16):
+                        xs[m * 16 + e] = Float32(mX[m, k0 + e])
+                else:
+                    for e in cutlass.range_constexpr(16):
+                        xs[m * 16 + e] = Float32(0.0)
+            wa = cute.make_rmem_tensor((ROWS,), Int64)
+            wb = cute.make_rmem_tensor((ROWS,), Int64)
+            scs = cute.make_rmem_tensor((ROWS,), Float32)
+            for r in cutlass.range_constexpr(ROWS):
+                wa[r] = mW[row0 + r, q0]
+                wb[r] = mW[row0 + r, q0 + 1]
+                scs[r] = Float32(mS[row0 + r, gidx])
+            for r in cutlass.range_constexpr(ROWS):
+                b = cute.make_rmem_tensor((16,), Float32)
+                lo = Int32(wa[r] & Int64(0xFFFFFFFF)); hi = Int32(wa[r] >> Int64(32))
+                b[0] = Float32(Int32((lo << 24) >> 24)); b[1] = Float32(Int32((lo << 16) >> 24))
+                b[2] = Float32(Int32((lo << 8) >> 24));  b[3] = Float32(Int32(lo >> 24))
+                b[4] = Float32(Int32((hi << 24) >> 24)); b[5] = Float32(Int32((hi << 16) >> 24))
+                b[6] = Float32(Int32((hi << 8) >> 24));  b[7] = Float32(Int32(hi >> 24))
+                lo = Int32(wb[r] & Int64(0xFFFFFFFF)); hi = Int32(wb[r] >> Int64(32))
+                b[8] = Float32(Int32((lo << 24) >> 24)); b[9] = Float32(Int32((lo << 16) >> 24))
+                b[10] = Float32(Int32((lo << 8) >> 24)); b[11] = Float32(Int32(lo >> 24))
+                b[12] = Float32(Int32((hi << 24) >> 24)); b[13] = Float32(Int32((hi << 16) >> 24))
+                b[14] = Float32(Int32((hi << 8) >> 24)); b[15] = Float32(Int32(hi >> 24))
+                for m in cutlass.range_constexpr(MAXM):
+                    if m < M:
+                        d = Float32(0.0)
+                        for e in cutlass.range_constexpr(16):
+                            d = d + b[e] * xs[m * 16 + e]
+                        acc[r * MAXM + m] = acc[r * MAXM + m] + scs[r] * d
     for i in cutlass.range_constexpr(ROWS * MAXM):
         v = acc[i]
         for off in cutlass.range_constexpr(5):
@@ -104,14 +86,13 @@ def gemv_kernel(mW: cute.Tensor, mS: cute.Tensor, mX: cute.Tensor, mP: cute.Tens
         for r in cutlass.range_constexpr(ROWS):
             for m in cutlass.range_constexpr(MAXM):
                 if m < M:
-                    mP[bidy, m, row0 + r] = acc[r * MAXM + m]
+                    mY[m, row0 + r] = BFloat16(acc[r * MAXM + m])
 
 
 @cute.jit
-def gemv_launch(mW: cute.Tensor, mS: cute.Tensor, mX: cute.Tensor, mP: cute.Tensor,
-                M: Int32, KQ: Int32, N: Int32, NSPLIT: Int32, stream):
-    gemv_kernel(mW, mS, mX, mP, M, KQ).launch(grid=(N // (WARPS * ROWS), NSPLIT, 1), block=(NT, 1, 1),
-                                              smem=MAXM * KS * 4, stream=stream)
+def gemv_launch(mW: cute.Tensor, mS: cute.Tensor, mX: cute.Tensor, mY: cute.Tensor,
+                M: Int32, KQ: Int32, N: Int32, stream):
+    gemv_kernel(mW, mS, mX, mY, M, KQ).launch(grid=(N // (WARPS * ROWS), 1, 1), block=(WARPS * LANES, 1, 1), stream=stream)
 
 
 def unpack_int8(wp: torch.Tensor) -> torch.Tensor:
@@ -138,8 +119,7 @@ def main():
     N, KW = wp.shape; K = KW * 4; M = a.M
     torch.manual_seed(0)
     x = (torch.randn(M, K, device=dev) * 0.5).to(torch.bfloat16)
-    NSPLIT = K // KS
-    P = torch.zeros(NSPLIT, M, N, device=dev, dtype=torch.float32)
+    y = torch.empty(M, N, device=dev, dtype=torch.bfloat16)
     ref = reference(wp, sc, x)
     # torch bf16 baseline: dequant once (as a bf16 weight) + matmul (what a naive path costs)
     w_bf16 = (unpack_int8(wp).float() * sc.float().repeat_interleave(128, dim=1)).to(torch.bfloat16)
@@ -147,10 +127,9 @@ def main():
     wq = wp.view(torch.int64)                                    # [N, KW/2]
     KQ = wq.shape[1]
     mW = from_dlpack(wq, assumed_align=16); mS = from_dlpack(sc, assumed_align=16)
-    mX = from_dlpack(x, assumed_align=16); mP = from_dlpack(P, assumed_align=16)
-    compiled = cute.compile(gemv_launch, mW, mS, mX, mP, Int32(M), Int32(KQ), Int32(N), Int32(NSPLIT), stream)
-    compiled(mW, mS, mX, mP, Int32(M), Int32(KQ), Int32(N), Int32(NSPLIT), stream); torch.cuda.synchronize()
-    y = P.sum(0).to(torch.bfloat16)
+    mX = from_dlpack(x, assumed_align=16); mY = from_dlpack(y, assumed_align=16)
+    compiled = cute.compile(gemv_launch, mW, mS, mX, mY, Int32(M), Int32(KQ), Int32(N), stream)
+    compiled(mW, mS, mX, mY, Int32(M), Int32(KQ), Int32(N), stream); torch.cuda.synchronize()
     err = (y.float() - ref).abs().max().item(); rel = err / ref.abs().max().item()
     print(f"N={N} K={K} M={M}: max abs err {err:.4e} (rel to max {rel:.2e})")
     def bench(fn, iters):
@@ -158,7 +137,7 @@ def main():
         torch.cuda.synchronize(); t = time.perf_counter()
         for _ in range(iters): fn()
         torch.cuda.synchronize(); return (time.perf_counter() - t) / iters * 1e3
-    t_cute = bench(lambda: (compiled(mW, mS, mX, mP, Int32(M), Int32(KQ), Int32(N), Int32(NSPLIT), stream), P.sum(0)), a.iters)
+    t_cute = bench(lambda: compiled(mW, mS, mX, mY, Int32(M), Int32(KQ), Int32(N), stream), a.iters)
     t_bf16 = bench(lambda: torch.matmul(x, w_bf16.T), a.iters)
     bytes_int8 = wp.numel() * 4 + sc.numel() * 2
     print(f"cute w8a16 gemv: {t_cute:.3f} ms  ({bytes_int8/1e9/(t_cute/1e3):.0f} GB/s effective on {bytes_int8/1e6:.0f} MB)")

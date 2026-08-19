@@ -30,7 +30,9 @@ Per layer the expert path is exactly two Marlin MoE launches (w13, w2). With the
 out at roughly 75-80% of the node's memory bandwidth. The expert kernel is close to the byte floor
 already; a custom small-M expert kernel would buy a fraction of the 57% slice, not multiples.
 The dense int8 linears (`marlin::Marlin` w8a16: q/kv/o projections, shared expert) are 8-20% of the
-step depending on batch and have not been checked against bandwidth yet.
+step depending on batch. Checked 2026-08-19 on the real o_proj weight at M=3: Marlin runs at 239 GB/s,
+the practical DRAM ceiling of GB10 (cuBLAS bf16 tops at ~235); a CuTe DSL replacement reached parity
+(224) and cannot beat it. The GEMM path is at the floor (see kernels/cute/README.md).
 Communication is a quarter of the step and IS latency-bound: five collectives per layer (two TP
 all-reduces ~60 us, two indexer all-gathers ~85 us for the DCP top-k path, one send/recv ~50 us for the
 DCP KV all-to-all), ~78 x 340 us. Attention itself is 4%.
@@ -41,7 +43,7 @@ DCP KV all-to-all), ~78 x 340 us. Attention itself is 4%.
    slice, no model-quality cost, nobody has done it for DSA on DCP.
 2. Tokens per byte: the experts are bandwidth-bound, so every accepted draft token is free. A drafter
    finetuned on captures from this exact quant and stack (bird measured +25% on the same body).
-3. Check the dense w8a16 linears against bandwidth at M=3..12; second kernel-shape target if short.
+3. (Done 2026-08-19) Dense w8a16 linears are at the DRAM ceiling; no kernel-shape target there.
 4. Expert parallel: does not change bytes per node, trades the all-reduces for a dispatch a2a; one cheap
    boot, not expected to be the win.
 
