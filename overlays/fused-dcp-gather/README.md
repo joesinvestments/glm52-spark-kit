@@ -47,3 +47,13 @@ battery vs baseline-32K (35.9 / 11.2 / 566), and a decode-step trace to count Al
   is somewhere in what the model reads. Verify mode `VLLM_FUSED_DCP_GATHER=2` now computes the original
   two-gather result alongside and set-compares per row on-device, logging the first mismatches; one 32K
   boot with it localizes the bug.
+
+## 2026-08-19 04:44: PARKED
+Verify mode (=2) failed all four boot attempts with a `c10 DistError` at distributed init (the reference
+all-gather issued inside the indexer during warm-up breaks the DCP group's init sequence), while mode 1
+booted first try but diverged. With the measured payoff at ~22 collectives per step (~1.5% at C1) the
+remaining diagnosis is not worth further fleet boots. Kept for the record and for anyone who wants to
+finish it: the mechanism is proven and the divergence is somewhere between the deferred finish and the
+consumer of the shared top-k buffer. The larger comm items (78 query gathers, 156 all-reduces per step)
+are structural to TP+DCP and are the real targets (RDMA-direct 4-rank collectives, all-reduce overlap).
+Production restored: gate PASS, 36.51 / 11.34 / 603.
