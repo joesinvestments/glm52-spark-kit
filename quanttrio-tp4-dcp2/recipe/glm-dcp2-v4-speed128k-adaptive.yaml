@@ -1,0 +1,110 @@
+# GLM-5.2 QuantTrio unpruned · TP4 + DCP2 · ADAPTIVE MTP 2/4/5 · 262144 ctx
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# STAGED — NOT YET RUN. Requires the image from scripts/build_adaptive_mtp.sh.
+# Delta from glm-dcp2-v2-longctx.yaml is ONLY the adaptive-MTP block + capture sizing.
+# Everything else (DCP2, index_topk_pattern, ctx, seqs, batched, gmu) is unchanged so the
+# comparison against v2 is one variable, not five.
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# WHAT CHANGED vs v2, and why each line:
+#
+#  1. num_speculative_tokens 2 -> 5
+#     The ladder is filtered by `depth <= num_speculative_tokens` in the patch, so this must
+#     be the MAX of the ladder or 5 gets silently dropped. It is a CEILING, not the running
+#     value — the controller starts at 2.
+#
+#  2. + adaptive_speculative_tokens_window: 32
+#     Enables the controller. Without it the config is just fixed k=5, which we measured
+#     WORSE than k=2 on this model (2.97 vs 3.45 accepted per draft step).
+#
+#  3. + VLLM_ADAPTIVE_SPEC_DEPTHS "2,4,5"   (patch default is "2,4")
+#     CosmicRaisins ship 2,4,5 in production. Keeping their ladder, not inventing one.
+#
+#  4. + VLLM_MTP_INSTRUMENT / _WINDOW
+#     The controller logs its own decisions and per-position acceptance. This is the
+#     measurement we have been doing by hand — let it report.
+#
+#  5. + VLLM_B12X_MLA_SPEC_EXTEND_AS_DECODE "1"
+#     In their production profile. UNVERIFIED what it does — I have not read the b12x source.
+#     Flagged rather than silently adopted; drop it if the boot misbehaves.
+#
+#  6. max_cudagraph_capture_size 36 -> 72, and the explicit cudagraph_capture_sizes REMOVED.
+#     ★ THIS IS THE ONE THAT BITES. The patch computes capture sizes itself:
+#         decode_query_len = depth + 1  for every depth in the ladder  -> 3, 5, 6
+#         graphs captured   = query_len x num_reqs, num_reqs in 1..min(max_num_seqs, 32)
+#       At OUR max_num_seqs=12 the largest graph is 6 x 12 = 72 tokens.
+#       CosmicRaisins set 10 because they run max_num_seqs=1 (6 x 1 = 6).
+#     ★ DO NOT COPY THEIR 10. On DeepSeek we copied capture=36 from a 6-seq config into our
+#       12-seq one; vLLM logged "Truncating max_cudagraph_capture_size to 32" and decode
+#       silently fell back to EAGER above 4 concurrent requests. A concurrency-1 benchmark
+#       cannot see that. Verify after boot:
+#         docker logs <c> 2>&1 | grep -c "Truncating max_cudagraph_capture_size"   # must be 0
+#       The explicit capture_sizes list is removed because the patch derives the set; a
+#       hand-written ladder would fight it.
+#
+#  7. - pass_config.fuse_gemm_comms
+#     PROVEN INERT on GB10 (vllm/config/vllm.py:1235-1241 sets enable_sp=False,
+#     fuse_gemm_comms=False; sm_121 is absent from the capability dict in seqpar.py:40-53).
+#     Removing dead weight, gain 0.0%.
+#
+# ⚠ THE OPEN QUESTION, stated plainly: CosmicRaisins run this at max_num_seqs=1. We run 12.
+#   The controller adapts k to observed ACCEPTANCE, not to batch size — so its behaviour at
+#   concurrency 12 is genuinely unmeasured by anyone. That is a reason to test it, not a
+#   reason to trust it. Watch for k oscillating per window under mixed traffic.
+#
+# ⚠ GRAPH COUNT RISES. v2 captured 9 sizes; this captures 3 query-lens x 12 reqs = up to 36.
+#   Graph memory competes with the KV pool. If `Available KV cache memory` drops materially
+#   versus v2, that is the cause — record both from the boot log before judging throughput.
+#
+# HOW TO READ THE RESULT — the controller narrates itself:
+#   docker logs <c> 2>&1 | grep -iE 'probe_k4|probe_k5|k4_hold|k5_hold|tail_reject|k2_baseline'
+#   Gates (read from acceptance_length.py, not a README):
+#     k=2 -> k=4 : head_ratio = mean_accepted/mean_drafted >= 0.85
+#     k=4 -> k=5 : tail_gain_23 >= 0.70 ;  hold k=4 at >= 0.35 ; else back to k=2
+#     k=5 hold   : position_4_gain >= 0.15
+#   Our own prior: at k=2 prose acceptance is 56-58% -> stays at k=2 on prose, correctly.
+#   Code is where it should promote. If it NEVER leaves k=2, that is a real answer, not a bug.
+recipe_version: "1"
+name: GLM-5.2-unpruned-dcp2-v3-adaptive
+description: UNPRUNED QuantTrio Int4-Int8Mix, e232d26 stack + CosmicRaisins adaptive MTP (2/4/5), TP=4 mp + DCP2, ctx 131072, batch 2048 (constant indexer product)
+raw_entrypoint: true
+shared_weights_nfs: false
+cluster_nodes: [192.168.100.11, 192.168.100.12, 192.168.100.13, 192.168.100.14]
+container: glm52-dcp:e232d26-adaptive-ohfix   # adaptive + MTP-overhang crash fix (first boot). Window cell 2: e232d26-adaptive-jul (July kernels, +36-45% prefill upstream-measured)
+model: /root/.cache/huggingface/hub/glm52-quanttrio-unpruned
+cluster_only: true
+defaults:
+  port: 8210
+env:
+  VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+  LD_PRELOAD: /root/.cache/huggingface/hub/nccl-2.30.4/libnccl.so.2
+  HF_HOME: /root/.cache/huggingface
+  TRITON_CACHE_DIR: /root/.cache/huggingface/.tritoncache-eldritch
+  HF_HUB_OFFLINE: "1"
+  VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+  GLM52_BIND_HOST_TRITON: "0"
+  VLLM_USE_B12X_SPARSE_INDEXER: "1"
+  VLLM_USE_V2_MODEL_RUNNER: "1"
+  VLLM_DCP_GLOBAL_TOPK: "1"
+  VLLM_DCP_SHARD_DRAFT: "1"
+  # ── adaptive MTP (new in v3) ──
+  VLLM_ADAPTIVE_SPEC_DEPTHS: "2,4,5"
+  VLLM_MTP_INSTRUMENT: "1"
+  VLLM_MTP_INSTRUMENT_WINDOW: "32"
+  VLLM_B12X_MLA_SPEC_EXTEND_AS_DECODE: "1"
+  # ──────────────────────────────
+  TORCH_CUDA_ARCH_LIST: "12.1a"
+  NCCL_NET: IB
+  NCCL_IB_DISABLE: "0"
+  NCCL_IB_HCA: "rocep1s0f0,roceP2p1s0f0"
+  NCCL_SOCKET_IFNAME: "enP7s7,enp1s0f0np0,enP2p1s0f0np0"
+  GLOO_SOCKET_IFNAME: "enp1s0f0np0"
+  NCCL_IB_GID_INDEX: "3"   # placeholder — glm_launch.sh resolves the real index dynamically each boot and seds it here
+  NCCL_CROSS_NIC: "1"
+  NCCL_CUMEM_ENABLE: "0"
+  NCCL_IGNORE_CPU_AFFINITY: "1"
+  NCCL_DEBUG: WARN
+  VLLM_MARLIN_USE_ATOMIC_ADD: "1"
+  VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "256"
+command: vllm serve /root/.cache/huggingface/hub/glm52-quanttrio-unpruned --served-model-name glm-5.2-quanttrio --host 0.0.0.0 --port {port} --trust-remote-code --reasoning-parser glm45 --tool-call-parser glm47 --enable-auto-tool-choice --enable-prefix-caching --speculative-config '{{"model":"/root/.cache/huggingface/hub/glm52-quanttrio-unpruned","method":"mtp","quantization":"compressed-tensors","draft_attention_backend":"B12X_MLA_SPARSE","num_speculative_tokens":5,"draft_sample_method":"probabilistic","adaptive_speculative_tokens_window":32}}' --tensor-parallel-size 4 --pipeline-parallel-size 1 --decode-context-parallel-size 2 --dcp-kv-cache-interleave-size 1 --attention-backend B12X_MLA_SPARSE --moe-backend flashinfer_cutlass --hf-overrides '{{"use_index_cache":true,"index_topk_pattern":"FFFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSSFSSS"}}' --max-model-len 131072 --max-num-seqs 12 --max-num-batched-tokens 2048 --long-prefill-token-threshold 8192 --gpu-memory-utilization 0.90 --kv-cache-dtype fp8_ds_mla --async-scheduling --distributed-executor-backend mp --compilation-config '{{"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":72}}'

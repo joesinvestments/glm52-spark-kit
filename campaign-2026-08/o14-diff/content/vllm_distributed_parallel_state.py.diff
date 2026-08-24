@@ -1,0 +1,60 @@
+--- ours
++++ his
+@@ -25,5 +25,4 @@
+ 
+ import contextlib
+-import os
+ import gc
+ import pickle
+@@ -1477,5 +1476,22 @@
+         torch.cuda.Stream(device=device)
+     )
+-    with get_tp_group().graph_capture(context), get_pp_group().graph_capture(context):
++    # R9/r15 port: also enter the DCP group's own graph_capture context when
++    # DCP is active with world_size > 1 (DCP>1's alltoall/allgather-reducescatter
++    # comm needs to be captured into the same CUDA graph as TP/PP).
++    # R17 v1 is DCP1 (decode_context_parallel_size == 1): get_dcp_group() is
++    # still initialized (world_size == 1), so this is unconditionally a
++    # nullcontext() here and has no behavioral effect -- wired for forward
++    # compatibility with DCP>1, not exercised at DCP1. DEFERRED (DCP>1-only):
++    # no further DCP>1 comm-capture wiring beyond this was ported.
++    maybe_dcp_capture = (
++        get_dcp_group().graph_capture(context)
++        if _DCP is not None and get_dcp_group().world_size > 1
++        else nullcontext()
++    )
++    with (
++        get_tp_group().graph_capture(context),
++        get_pp_group().graph_capture(context),
++        maybe_dcp_capture,
++    ):
+         yield context
+ 
+@@ -2201,27 +2217,4 @@
+     memory system (shared access to shared memory).
+     """
+-    # One-GPU-per-node short-circuit. On a fleet where every rank is its own
+-    # node (e.g. 4x DGX Spark, TP=4 across nodes) no two ranks ever share a
+-    # memory system, so the answer is known without any collective: only
+-    # source_rank is on the source node. The gloo broadcast + barrier below is
+-    # where ~40% of boots on that fleet died -- the broadcast timeout is
+-    # swallowed by the try/except, the ranks desynchronize, and the barrier
+-    # (outside the try) raises "Application timeout caused pair closure".
+-    # Opt-in only; every other topology is untouched.
+-    if os.environ.get("VLLM_ONE_GPU_PER_NODE", "0") == "1":
+-        if isinstance(pg, ProcessGroup):
+-            world_size = torch.distributed.get_world_size(group=pg)
+-            _rk = torch.distributed.get_rank(group=pg)
+-        else:
+-            world_size = pg.world_size
+-            _rk = pg.rank
+-        # gloo-probe: this is called immediately before the first collective on
+-        # each new group (shm_broadcast handle broadcast). Log wall-clock arrival
+-        # per rank so inter-rank skew can be measured instead of guessed.
+-        import time as _t
+-        logger.info("[gloo-probe] rank=%s world=%s src=%s arrived_pre_first_collective at %.3f",
+-                    _rk, world_size, source_rank, _t.time())
+-        return [i == source_rank for i in range(world_size)]
+-
+     if isinstance(pg, ProcessGroup):
+         assert torch.distributed.get_backend(pg) != torch.distributed.Backend.NCCL, (

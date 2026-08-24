@@ -1,0 +1,19 @@
+{
+ "cell": "cell0-baseline-v2",
+ "storm": {
+  "wall_s": 235.5,
+  "errors": 0,
+  "prefill_toks_per_s": 224.7,
+  "agg_decode_toks_per_s": 1.7,
+  "acceptance_pct": 67.1
+ },
+ "c1": {
+  "decode_toks_per_s": 5.7,
+  "prefill_toks_per_s": 281.8,
+  "acceptance_pct": 65.6
+ },
+ "deep30k": {
+  "wall_s": 455.4,
+  "prefill_toks_per_s": 369.8
+ }
+}

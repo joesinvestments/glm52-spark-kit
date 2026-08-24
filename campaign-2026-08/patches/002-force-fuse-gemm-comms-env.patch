@@ -1,0 +1,65 @@
+Patch 002: env-forced fuse_gemm_comms (async TP) + construction-site diagnostics.
+
+Why: the partner's golden argv carries pass_config {"fuse_gemm_comms": true}
+and his private wheel honors it; public v0.27.0 silently drops it on the Ray
+path (issue #1 on his repo). fuse_gemm_comms = async TP = allreduce/compute
+overlap - the single biggest latency-bound slice of the decode step per the
+glm52-spark-kit decode profile (~30 ms/step of collectives). It force-enables
+sequence parallelism internally, so memory is watched on first boot.
+
+Mechanics: env var instead of fixing the plumbing blind - workers inherit the
+container environment no matter how many times VllmConfig gets rebuilt between
+API layer and EngineCore, so this works even before we locate the exact drop
+point; the two log branches tell us whether user pass_config survived to each
+construction site. Unset => byte-identical stock.
+
+Boot usage: add VLLM_FORCE_FUSE_GEMM_COMMS=1 to the serve container env.
+First boot MUST run the correctness gate x4/x8 and watch MemAvailable.
+
+Applies to vllm v0.27.0 (vllm/config/compilation.py).
+--- a/vllm/config/compilation.py
++++ b/vllm/config/compilation.py
+@@ -2,6 +2,7 @@
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+ 
+ import enum
++import os
+ from collections import Counter
+ from collections.abc import Callable
+ from dataclasses import field, fields
+@@ -1247,6 +1248,35 @@
+             )
+             self.cudagraph_mode = CUDAGraphMode.NONE
+ 
++
++        # [glm52-collab] Env-forced async TP. On public v0.27.0 + Ray, user
++        # pass_config delivered through --compilation-config has been observed
++        # lost between the API layer and EngineCore (every fusion pass
++        # resolves False engine-side; see 0xdfi/glm-5.2-dgx-spark-vllm027
++        # issue #1). An env var survives every config-reconstruction path
++        # because workers inherit the serving container environment. Unset
++        # means byte-identical stock behavior.
++        if os.environ.get("VLLM_FORCE_FUSE_GEMM_COMMS", "").strip().lower() in (
++            "1",
++            "true",
++            "yes",
++            "on",
++        ):
++            if not self.pass_config.fuse_gemm_comms:
++                logger.warning_once(
++                    "VLLM_FORCE_FUSE_GEMM_COMMS=1: forcing pass_config."
++                    "fuse_gemm_comms=True (async TP; implies enable_sp). "
++                    "Value before force: %s",
++                    self.pass_config.fuse_gemm_comms,
++                )
++                self.pass_config.fuse_gemm_comms = True
++            else:
++                logger.info_once(
++                    "VLLM_FORCE_FUSE_GEMM_COMMS=1: fuse_gemm_comms was "
++                    "already True; user pass_config reached this construction "
++                    "site intact."
++                )
++
+     def set_splitting_ops_for_attn_fusion(self):
+         assert self.pass_config.fuse_attn_quant
+         if self.splitting_ops is None:

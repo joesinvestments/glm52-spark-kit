@@ -1,0 +1,13 @@
+FROM glm52-legacy:challenger-v2
+RUN python3 - << "PY"
+p="/usr/local/lib/python3.12/dist-packages/vllm/model_executor/models/deepseek_mtp.py"
+s=open(p).read()
+old="""        if quant_config is not None:"""
+new="""        quant_config = self.quant_config
+        if quant_config is not None:"""
+assert old in s and "self.quant_config = vllm_config.quant_config" in s
+s=s.replace(old,new,1)
+open(p,"w").write(s)
+import py_compile; py_compile.compile(p, doraise=True)
+print("v2b fix applied + compiles")
+PY

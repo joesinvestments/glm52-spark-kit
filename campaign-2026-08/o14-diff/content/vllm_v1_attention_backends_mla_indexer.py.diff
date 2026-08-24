@@ -1,0 +1,25 @@
+--- ours
++++ his
+@@ -821,21 +821,7 @@
+                 # Give each of the flattened entries the same block table row as the
+                 # original request.
+-                #
+-                # Width fix (DCP > 1): expanded_block_table_buffer is allocated at
+-                # the DCP-sharded per-rank width (block_table_width), but the
+-                # incoming block_table carries the GLOBAL width. The uniform triton
+-                # path above copies exactly expanded_bt_stride columns per row and
+-                # so never notices; this torch path assigned the full-width tensor
+-                # and raised (e.g. 782 vs 3126 at DCP=4 / 200K). Slice the source
+-                # to the buffer width so both paths agree. Any batch that padded to
+-                # a cudagraph capture size (padding rows have decode_len 0) lands
+-                # here, so without this the capture ladder had to be gap-free.
+-                bt_width = self.expanded_block_table_buffer.shape[1]
+                 self.expanded_block_table_buffer[:actual_expanded] = (
+                     torch.repeat_interleave(
+-                        block_table[:, :bt_width],
+-                        decode_lens,
+-                        dim=0,
+-                        output_size=actual_expanded,
++                        block_table, decode_lens, dim=0, output_size=actual_expanded
+                     )
+                 )

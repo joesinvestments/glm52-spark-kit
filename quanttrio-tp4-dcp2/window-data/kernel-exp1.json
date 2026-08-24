@@ -1,0 +1,1 @@
+{"cell": "kernel-exp1-atomicadd", "storm": {"wall_s": 95.8, "errors": 0, "prefill_toks_per_s": 430.6, "agg_decode_toks_per_s": 4.5, "acceptance_pct": 38.4}, "c1": {"decode_toks_per_s": 44.6, "prefill_toks_per_s": 933.1, "acceptance_pct": 56.8}, "deep30k": {"wall_s": 265.4, "prefill_toks_per_s": 546.0}}

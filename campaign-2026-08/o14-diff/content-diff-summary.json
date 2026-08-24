@@ -1,0 +1,42 @@
+{
+ "vllm/compilation/b12x_capture.py": "IDENTICAL",
+ "vllm/config/cache.py": "IDENTICAL",
+ "vllm/config/scheduler.py": "IDENTICAL",
+ "vllm/config/speculative.py": "IDENTICAL",
+ "vllm/config/vllm.py": "IDENTICAL",
+ "vllm/distributed/parallel_state.py": {
+  "delta_lines": 43
+ },
+ "vllm/engine/arg_utils.py": "IDENTICAL",
+ "vllm/model_executor/layers/attention/builda_bmm_v0.py": "IDENTICAL",
+ "vllm/model_executor/layers/attention/builda_bmm_v1.py": "IDENTICAL",
+ "vllm/model_executor/layers/attention/mla_attention.py": {
+  "delta_lines": 32
+ },
+ "vllm/model_executor/layers/fused_moe/experts/marlin_moe.py": "IDENTICAL",
+ "vllm/model_executor/layers/logits_processor.py": "IDENTICAL",
+ "vllm/model_executor/layers/sparse_attn_indexer.py": {
+  "delta_lines": 211
+ },
+ "vllm/model_executor/models/deepseek_mtp.py": "IDENTICAL",
+ "vllm/utils/torch_utils.py": {
+  "delta_lines": 4
+ },
+ "vllm/v1/attention/backends/mla/b12x_mla_sparse.py": {
+  "delta_lines": 48
+ },
+ "vllm/v1/attention/backends/mla/indexer.py": {
+  "delta_lines": 16
+ },
+ "vllm/v1/attention/backends/registry.py": "IDENTICAL",
+ "vllm/v1/core/sched/scheduler.py": "IDENTICAL",
+ "vllm/v1/kv_cache_interface.py": {
+  "delta_lines": 20
+ },
+ "vllm/v1/spec_decode/dynamic/acceptance_length.py": "IDENTICAL",
+ "vllm/v1/spec_decode/dynamic/depth_ladder.py": "IDENTICAL",
+ "vllm/v1/worker/gpu/cudagraph_utils.py": "IDENTICAL",
+ "vllm/v1/worker/gpu/spec_decode/speculator.py": {
+  "delta_lines": 5
+ }
+}

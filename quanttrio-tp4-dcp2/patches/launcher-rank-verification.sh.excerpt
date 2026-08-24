@@ -1,0 +1,13 @@
+        # ★ 2026-08-10: head API answering is NOT proof the fleet is whole. A docker
+        # rm/create race left gx10-4 rank-less while the head still served /v1/models;
+        # first collective then died on NCCL RETRY_EXC to the missing peer. Count ranks.
+        up=0
+        for n in "${NODES[@]}"; do
+            st=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$n" 'docker ps --format "{{.Names}}" | grep -c "^vllm_node$"' 2>/dev/null || echo 0)
+            up=$((up + st))
+        done
+        if [ "$up" -eq 4 ]; then
+            say "SERVING (~${i}min, 4/4 ranks verified)"; exit 0
+        else
+            say "head serving but only ${up}/4 ranks alive — NOT declaring success"
+        fi

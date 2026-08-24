@@ -1,0 +1,76 @@
+diff --git a/recipes/launch.sh b/recipes/launch.sh
+index de91073..3759a10 100755
+--- a/recipes/launch.sh
++++ b/recipes/launch.sh
+@@ -67,6 +67,19 @@ RDMA_IFNAME="${RDMA_IFNAME:-enp1s0f1np1}"     # NCCL_SOCKET_IFNAME / GLOO_SOCKET
+ IB_HCA="${IB_HCA:-rocep1s0f1}"                # NCCL_IB_HCA
+ RDMA_DEV_UVERBS="${RDMA_DEV_UVERBS:-/dev/infiniband/uverbs1}"
+ RDMA_DEV_RDMACM="${RDMA_DEV_RDMACM:-/dev/infiniband/rdma_cm}"
++# Optional second RoCE rail devices (set alongside NCCL_IB_HCA=<hca0>,<hca1>).
++RDMA_DEV_UVERBS2="${RDMA_DEV_UVERBS2:-}"
++RDMA_DEV_RDMACM2="${RDMA_DEV_RDMACM2:-}"
++# RDMA_DEV_ALL=1 mounts the host's entire /dev/infiniband tree instead of
++# per-device selection (production-fleet pattern). Takes precedence above.
++RDMA_DEV_ALL="${RDMA_DEV_ALL:-0}"
++if [[ "$RDMA_DEV_ALL" == 1 ]]; then
++  DEV_ARGS=(--device=/dev/infiniband)
++else
++  DEV_ARGS=(--device="$RDMA_DEV_UVERBS" --device="$RDMA_DEV_RDMACM"
++    ${RDMA_DEV_UVERBS2:+--device=${RDMA_DEV_UVERBS2}}
++    ${RDMA_DEV_RDMACM2:+--device=${RDMA_DEV_RDMACM2}})
++fi
+ 
+ # Regex of container names this script must NEVER stop, remove, or otherwise
+ # touch on any node — e.g. a separately-managed retained-container fleet you
+@@ -211,6 +224,26 @@ ARGS=(
+   --enable-prefix-caching
+ )
+ 
++# EXTRA_SERVE_ARGS: optional space-separated extra args appended verbatim to
++# the serve argv (e.g. "--cpu-distributed-timeout-seconds 300" for fast-fail
++# boot cycling on fabrics with the known DCP-group init hang).
++if [[ -n "${EXTRA_SERVE_ARGS:-}" ]]; then
++  read -r -a EXTRA_ARR <<< "$EXTRA_SERVE_ARGS"
++  ARGS+=("${EXTRA_ARR[@]}")
++fi
++
++# STRIP_SPEC=1 removes speculative decoding entirely (no-spec reference arms).
++if [[ "${STRIP_SPEC:-0}" == 1 ]]; then
++  FILTERED=()
++  skip=0
++  for a in "${ARGS[@]}"; do
++    if [ $skip = 1 ]; then skip=0; continue; fi
++    if [ "$a" = "--speculative-config" ]; then skip=1; continue; fi
++    FILTERED+=("$a")
++  done
++  ARGS=("${FILTERED[@]}")
++fi
++
+ render_argv() { printf '%q ' "${ARGS[@]}"; printf '\n'; }
+ 
+ if [[ "$MODE" == render ]]; then
+@@ -259,6 +292,15 @@ for h in "${NODES[@]}"; do
+   [[ -z "$busy" ]] || { echo "refusing: $h has a listener on ${PORT}/${RAY_PORT}/${RAY_NODE_MANAGER_PORT}/${RAY_OBJECT_MANAGER_PORT}: $busy" >&2; exit 65; }
+ done
+ 
++if [[ "${DROP_CACHES:-1}" == 1 ]]; then
++  log 'preflight: compacting page cache on all nodes'
++  for h in "${NODES[@]}"; do
++    # NOTE: must go through bash -lc; remote() %q-quotes each arg, so a bare
++    # compound string would be executed as one literal filename.
++    remote "$h" bash -lc 'sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null'
++  done
++fi
++
+ log 'preflight: checking model path, RDMA devices, and no stale candidate containers'
+ for i in 0 1 2 3; do
+   h="${NODES[$i]}"; n="${NAMES[$i]}"
+@@ -278,7 +320,7 @@ log 'all preflight checks passed'
+ COMMON=(
+   --gpus all --network host --ipc host --shm-size 16g --ulimit memlock=-1:-1 --pids-limit=-1
+   ${CPUSET_CPUS:+--cpuset-cpus=${CPUSET_CPUS}} ${CPUSET_MEMS:+--cpuset-mems=${CPUSET_MEMS}}
+-  --device="${RDMA_DEV_UVERBS}" --device="${RDMA_DEV_RDMACM}"
++  "${DEV_ARGS[@]}"
+   --label com.recipe.glm52.run_id="$RUN_ID"
+   --label com.recipe.glm52.dcp_size="${DCP_SIZE}"
+   --label com.recipe.glm52.max_model_len="${MAX_MODEL_LEN}"

@@ -1,0 +1,22 @@
+GLM-5.2 QuantTrio TP4 on 4x DGX Spark
+Copyright 2026 joesinvestments
+
+This repository is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It vendors and builds upon Apache-2.0 licensed work by others:
+- legacy-stack/kernels/ and legacy-stack/mods/glm52-*: Triton sparse-MLA kernels and
+  install mods from CosmicRaisins/glm-5.2-gb10, replicated via ciprianveg's mod scripts
+  (NVIDIA forum thread 374125), vendored here via tonyd2wild's redistribution with
+  original attribution headers and the kernels/NOTICE file intact.
+- legacy-stack/draft-quant.patch: draft-quant packed-modules mapping from
+  CosmicRaisins/glm-5.2-gb10 (patches/draft-quant-packed-mapping.patch).
+- legacy-stack/mods/decode-aware-scheduler: penguinchang/ciprianveg lineage.
+- patches/fix-indexer-mtp-overhang.py: tonyd2wild's fix, community-reported bug.
+- The adaptive-MTP controller referenced in the DCP recipe: Aiden Le's acceptance-length
+  adaptation, forward-ported by CosmicRaisins.
+- The NVFP4 KV-cache port baked into the production image: tonyd2wild's port
+  (GLM-5.2-NVFP4-KV-4x-DGX-Spark repo, port/), building on danielwoz's E2M1 store kernel
+  (vllm-dspark-nvfp4). BTankut's glm-5.2-4x-dgx-spark 380K recipe provided the pinned-pool
+  discipline and the external deep-prefill numbers that motivated our measurement.
+  drowzeys independently built a parallel nvfp4-MLA KV implementation.
+Full credit chain in the README's credits section. Errors of integration are ours.

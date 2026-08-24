@@ -1,0 +1,1 @@
+{"cell": "challenger-legacy", "storm": {"wall_s": 91.2, "errors": 0, "prefill_toks_per_s": 281.6, "agg_decode_toks_per_s": 4.0, "acceptance_pct": 40.6}, "c1": {"decode_toks_per_s": 21.1, "prefill_toks_per_s": 898.5, "acceptance_pct": 38.5}, "deep30k": {"wall_s": 322.8, "prefill_toks_per_s": 447.2}}

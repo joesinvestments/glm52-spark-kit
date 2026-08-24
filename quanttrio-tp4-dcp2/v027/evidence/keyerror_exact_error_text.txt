@@ -1,0 +1,17 @@
+Captured live from `docker logs vllm_slot --tail 60` on gx10-1, run1, 2026-08-13 ~03:43:29 UTC.
+Config: screen_memcheck3_none.sh (max-model-len 64000, kv-cache-memory-bytes 4294967296,
+gpu-memory-utilization 0.70, max-num-seqs 4, max-num-batched-tokens 2048, NONE cudagraph mode).
+NOT independently re-extractable from docker logs after this point: the container auto-restarted
+(StartedAt 03:44:32, ~1 min after the crash) and docker logs only retains history since that
+restart boundary. This is the verbatim text as read from the live tail before that happened.
+
+  (EngineCore pid=279) ERROR 08-13 03:43:29 [core.py:1351]                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  (EngineCore pid=279) ERROR 08-13 03:43:29 [core.py:1351]   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/core/sched/scheduler.py", line 1761, in update_from_output
+  (EngineCore pid=279) ERROR 08-13 03:43:29 [core.py:1351]     req_index = model_runner_output.req_id_to_index[req_id]
+  (EngineCore pid=279) ERROR 08-13 03:43:29 [core.py:1351]                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  (EngineCore pid=279) ERROR 08-13 03:43:29 [core.py:1351] KeyError: 'chatcmpl-bff5cbb6fbf6b0d6-b665a296'
+  (EngineCore pid=279) INFO 08-13 03:43:29 [multiproc_executor.py:440] [shutdown] Executor: waiting for worker exit count=1
+  (Worker_TP0 pid=334) INFO 08-13 03:43:29 [multiproc_executor.py:804] Parent process exited, terminating worker queues
+  (APIServer pid=1) ERROR 08-13 03:43:29 [async_llm.py:724] AsyncLLM output_handler failed.
+  (APIServer pid=1) ERROR 08-13 03:43:29 [async_llm.py:724] vllm.v1.engine.exceptions.EngineDeadError: EngineCore encountered an issue. See stack trace (above) for the root cause.
+  (APIServer pid=1) INFO: "POST /v1/chat/completions HTTP/1.1" 500 Internal Server Error  [x7]

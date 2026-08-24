@@ -1,0 +1,67 @@
+Patch 004 [tailquant]: router-frequency profiler (env-gated, zero-cost when unset).
+
+Harvests per-layer expert-hit histograms from live topk_ids at every MoE
+application. This is the data prerequisite for TailQuant mixed-precision expert
+requantization (collab-work/tailquant/DESIGN.md): precision follows measured
+routing frequency. Flushes router_hist.json every 65k tokens to
+$VLLM_TAILQUANT_PROFILE_DIR. Covers the MarlinExperts.apply dense-batch path
+(V1 runner); batched/micro-kernel paths unhooked in v1.
+
+Target: glm52-spark-kit overlay file marlin_moe.py (apply AFTER baking overlays).
+--- a/vllm/model_executor/layers/fused_moe/experts/marlin_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/marlin_moe.py
+@@ -59,6 +59,46 @@
+ )
+ from vllm.platforms import current_platform
+ from vllm.scalar_type import ScalarType, scalar_types
++
++
++# [glm52-collab][tailquant] Router-frequency profiler. When
++# VLLM_TAILQUANT_PROFILE_DIR is set, accumulate per-layer expert-hit histograms
++# from the live topk_ids at every MoE application, flushing JSON periodically.
++# Zero effect when unset. Layer attribution: one MarlinExperts instance per
++# layer; prefix when available, else stable per-instance id.
++_TQ = {"dir": None, "hists": {}, "tokens": 0}
++
++
++def _tq_record(owner, topk_ids):
++    d = _TQ["dir"]
++    if d is None:
++        _TQ["dir"] = d = os.environ.get("VLLM_TAILQUANT_PROFILE_DIR") or ""
++    if not d or topk_ids is None or topk_ids.numel() == 0:
++        return
++    try:
++        key = getattr(owner, "prefix", None) or f"inst{id(owner)}"
++        h = _TQ["hists"].get(key)
++        e = int(topk_ids.max().item()) + 1
++        if h is None or h.numel() < e:
++            grown = torch.zeros(max(e, h.numel() if h is not None else 0, 256),
++                                dtype=torch.long, device=topk_ids.device)
++            if h is not None:
++                grown[: h.numel()] = h
++            _TQ["hists"][key] = h = grown
++        flat = topk_ids.flatten().to(torch.long)
++        valid = flat[(flat >= 0) & (flat < h.numel())]
++        h += torch.bincount(valid, minlength=h.numel())[: h.numel()]
++        _TQ["tokens"] += int(topk_ids.size(0))
++        if _TQ["tokens"] - getattr(_TQ, "last_flush", 0) >= 65536:
++            import json as _json
++            import pathlib as _pl
++            out = _pl.Path(d)
++            out.mkdir(parents=True, exist_ok=True)
++            _json.dump({k: v.tolist() for k, v in _TQ["hists"].items()},
++                       open(out / "router_hist.json", "w"))
++            _TQ.last_flush = _TQ["tokens"]
++    except Exception:
++        pass
+ 
+ 
+ def _fused_marlin_moe(
+@@ -791,6 +831,7 @@
+     ):
+         assert self.w1_scale is not None
+         assert self.w2_scale is not None
++        _tq_record(self, topk_ids)
+ 
+         ctx = self._lora_context
+         if ctx is None:

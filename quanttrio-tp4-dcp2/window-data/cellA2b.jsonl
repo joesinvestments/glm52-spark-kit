@@ -1,0 +1,32 @@
+{"cell": "cellA2b-nvfp4-315968", "segment": "c1-summary", "verdict": "DISCARDED", "reason": "+1 foreign requests completed mid-segment"}
+{"cell": "cellA2b-nvfp4-315968", "segment": "c1-prose", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-nvfp4-315968", "segment": "storm-c12", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-nvfp4-315968", "segment": "deep30k", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "c1-summary", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "c1-prose", "verdict": "DISCARDED", "reason": "+27 foreign requests completed mid-segment"}
+{"cell": "cellA2b-retry", "segment": "storm-c12", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "deep30k", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-now", "segment": "c1-summary", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-now", "segment": "c1-prose", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "c1-summary", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "c1-prose", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "storm-c12", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "deep30k", "verdict": "DISCARDED", "reason": "+2 foreign requests completed mid-segment"}
+{"cell": "cellA2b-now", "segment": "storm-c12", "verdict": "DISCARDED", "reason": "+1 foreign requests completed mid-segment"}
+{"cell": "cellA2b-now", "segment": "deep30k", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "c1-summary", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "c1-prose", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "storm-c12", "verdict": "DISCARDED", "reason": "+1 foreign requests completed mid-segment"}
+{"cell": "cellA2b-retry", "segment": "deep30k", "verdict": "VALID", "content_class": "summary/deep", "concurrency": 1, "wall_s": 89.7, "prefill_toks_per_s": 651.3, "decode_toks_per_s": 20.0, "acceptance_pct": 39.6}
+{"cell": "cellA2b-final", "segment": "c1-summary", "verdict": "DISCARDED", "reason": "+3 foreign requests completed mid-segment"}
+{"cell": "cellA2b-final", "segment": "c1-prose", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-final", "segment": "storm-c12", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-final", "segment": "deep30k", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "c1-summary", "verdict": "DISCARDED", "reason": "+16 foreign requests completed mid-segment"}
+{"cell": "cellA2b-retry", "segment": "c1-prose", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "storm-c12", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-retry", "segment": "deep30k", "verdict": "REFUSED", "reason": "server not idle within 120s \u2014 measurement would be polluted"}
+{"cell": "cellA2b-clean", "segment": "c1-summary", "verdict": "VALID", "content_class": "summary/peak", "concurrency": 1, "wall_s": 19.6, "prefill_toks_per_s": 905.9, "decode_toks_per_s": 23.9, "acceptance_pct": 48.2}
+{"cell": "cellA2b-clean", "segment": "c1-prose", "verdict": "VALID", "content_class": "prose/sustained", "concurrency": 1, "wall_s": 63.0, "prefill_toks_per_s": 891.1, "decode_toks_per_s": 19.4, "acceptance_pct": 35.5}
+{"cell": "cellA2b-clean", "segment": "storm-c12", "verdict": "VALID", "content_class": "summary/peak", "concurrency": 12, "wall_s": 82.6, "prefill_toks_per_s": 328.9, "decode_toks_per_s": 1.5, "acceptance_pct": 46.6}
+{"cell": "cellA2b-clean", "segment": "deep30k", "verdict": "VALID", "content_class": "summary/deep", "concurrency": 1, "wall_s": 87.5, "prefill_toks_per_s": 667.3, "decode_toks_per_s": 21.0, "acceptance_pct": 47.7}

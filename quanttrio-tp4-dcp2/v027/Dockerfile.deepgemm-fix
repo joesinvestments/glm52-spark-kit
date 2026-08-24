@@ -1,0 +1,8 @@
+FROM vllm-node-tf5-glm52-b12x:probe AS cudadev
+FROM vllm/vllm-openai:v0.27.0-aarch64
+COPY install_deepgemm.sh /tmp/install_deepgemm.sh
+COPY --from=cudadev /usr/local/cuda/include /usr/local/cuda/include
+COPY --from=cudadev /usr/local/cuda/lib64 /usr/local/cuda/lib64
+ENV CPATH=/usr/local/cuda/include LIBRARY_PATH=/usr/local/cuda/lib64 UV_SYSTEM_PYTHON=1
+RUN apt-get update -qq && apt-get install -y -qq git >/dev/null && bash /tmp/install_deepgemm.sh --ref 2fd67329
+RUN python3 -c "import deep_gemm; print(\"deep_gemm OK:\", deep_gemm.__file__)"

@@ -1,0 +1,39 @@
+--- ours
++++ his
+@@ -932,34 +932,6 @@
+                         mqa_q = torch.cat(mqa_q, dim=-1)
+                     if not qrep_decode:
+-                        # mqa_q do allgather in head dim. Fused DCP gather: if the
+-                        # sparse indexer deferred its top-k candidate gather for this
+-                        # layer, do ONE all-gather over [q | candidates] and finish the
+-                        # top-k here (byte-identical to two gathers, one collective).
+-                        from vllm.model_executor.layers.sparse_attn_indexer import (
+-                            dcp_topk_take, dcp_topk_finish)
+-                        _pending = dcp_topk_take()
+-                        if _pending is not None:
+-                            _packed = _pending["packed"]              # (B, topk, 2) fp32
+-                            _B = mqa_q.shape[0]
+-                            assert _packed.shape[0] == _B, (
+-                                f"fused DCP gather: batch mismatch q={_B} cand={_packed.shape[0]}")
+-                            _qh = mqa_q.shape[1]; _qd = mqa_q.shape[2]
+-                            _pk = _packed.shape[1]
+-                            _q_flat = mqa_q.reshape(_B, _qh * _qd)
+-                            _p_flat = _packed.reshape(_B, _pk * 2)
+-                            # dtypes differ (bf16 q, fp32 candidates): gather raw bytes.
+-                            _qb = _q_flat.contiguous().view(torch.uint8)
+-                            _pb = _p_flat.contiguous().view(torch.uint8)
+-                            _buf = torch.cat([_qb, _pb], dim=1)          # (B, qbytes + pbytes)
+-                            _g = get_dcp_group().all_gather(_buf, dim=1)   # (B, W*(qbytes+pbytes))
+-                            _W = get_dcp_group().world_size
+-                            _qbytes = _qb.shape[1]; _pbytes = _pb.shape[1]
+-                            _g = _g.view(_B, _W, _qbytes + _pbytes)
+-                            _gq = _g[:, :, :_qbytes].reshape(_B, _W * _qbytes).contiguous().view(mqa_q.dtype).view(_B, _W * _qh, _qd)
+-                            _gp = _g[:, :, _qbytes:].reshape(_B, _W * _pbytes).contiguous().view(torch.float32).view(_B, _W * _pk, 2)
+-                            dcp_topk_finish(_gp, _pending["topk_indices"], _pending["topk_tokens"], _pending.get("ref"))
+-                            mqa_q = _gq
+-                        else:
+-                            mqa_q = get_dcp_group().all_gather(mqa_q, dim=1)
++                        # mqa_q do allgather in head dim.
++                        mqa_q = get_dcp_group().all_gather(mqa_q, dim=1)
+ 
+             # call decode attn

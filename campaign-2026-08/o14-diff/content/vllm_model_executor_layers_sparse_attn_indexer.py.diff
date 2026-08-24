@@ -1,0 +1,289 @@
+--- ours
++++ his
+@@ -140,26 +140,9 @@
+     max_model_len: int,
+     total_seq_lens: int,
+-    dcp_world_size: int = 1,
+-    cp_kv_cache_interleave_size: int = 1,
+ ) -> int:
+-    """K rows the paged-indexer scratch must hold on THIS rank at profile time.
+-
+-    Under decode context parallelism a request's KV rows are sharded across the
+-    DCP group (interleaved in ``cp_kv_cache_interleave_size`` chunks), so a rank
+-    never holds more than ceil(rows / dcp) + one interleave slack per request.
+-    Reserving the unsharded ``max_model_len`` per rank over-allocates the paged
+-    indexer scratch by dcp_world_size (4x at DCP=4). On unified-memory GB10 that
+-    was enough to exhaust host+GPU memory during the profile run at 316K ctx
+-    (NV_ERR_NO_MEMORY, 2026-08-17). 0xdfi's exp1 notes record the same effect
+-    ("sparse-indexer scratch scaled with context x batch, not sharded by DCP").
+-    """
+     known_k_rows = max(int(max_model_len), int(total_seq_lens), 0)
+-    if known_k_rows <= 0:
+-        return _get_b12x_indexer_paged_supertile_k()
+-    dcp = max(1, int(dcp_world_size))
+-    if dcp == 1:
++    if known_k_rows > 0:
+         return known_k_rows
+-    slack = max(1, int(cp_kv_cache_interleave_size)) * 2
+-    return -(-known_k_rows // dcp) + slack
++    return _get_b12x_indexer_paged_supertile_k()
+ 
+ 
+@@ -420,48 +403,11 @@
+ 
+ def _assert_dcp1_for_b12x(dcp_world_size: int) -> None:
+-    # DCP>1 is supported by _merge_b12x_dcp_topk below; nothing to assert.
+-    return None
+-
+-
+-def _merge_b12x_dcp_topk(
+-    topk_scores: torch.Tensor,
+-    topk_indices: torch.Tensor,
+-    topk_tokens: int,
+-    dcp_rank: int,
+-    dcp_world_size: int,
+-    cp_interleave: int,
+-) -> None:
+-    """DCP>1 merge for the B12X indexer path.
+-
+-    Same contract as _merge_dcp_topk_global: each rank holds local top-K
+-    positions into its 1/N KV shard; a token in the global top-K must be in
+-    its owning rank's local top-K, so exchanging only the per-rank candidates
+-    is exact. The stock path packs (score, global_id) with a Triton kernel that
+-    looks scores up in the full logits row; b12x already returns the scores of
+-    exactly the selected indices (out_scores), so packing is pure arithmetic.
+-    Global id formula and -1/-inf padding are byte-identical to
+-    _pack_dcp_topk_candidates_triton_kernel. All device ops, no host sync, so
+-    it is CUDA-graph safe. Overwrites topk_indices with GLOBAL token ids.
+-    """
+-    if dcp_world_size <= 1:
+-        return
+-    from vllm.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
+-        stable_topk_from_gathered_candidates_cutedsl,
+-    )
+-    valid = topk_indices >= 0
+-    idx = topk_indices.clamp(min=0).to(torch.int64)
+-    gid = (
+-        (idx // cp_interleave) * (dcp_world_size * cp_interleave)
+-        + dcp_rank * cp_interleave
+-        + idx % cp_interleave
+-    )
+-    gid = torch.where(valid, gid, torch.full_like(gid, -1))
+-    sc = topk_scores.to(torch.float32)
+-    sc = torch.where(valid, sc, torch.full_like(sc, float("-inf")))
+-    packed = torch.stack([sc, gid.to(torch.float32)], dim=-1).contiguous()
+-    gathered = get_dcp_group().all_gather(packed, dim=1)
+-    stable_topk_from_gathered_candidates_cutedsl(
+-        gathered, topk_tokens, out=topk_indices
+-    )
++    if dcp_world_size > 1:
++        raise NotImplementedError(
++            "B12X sparse indexer DCP>1 merge is not ported in this R17 build "
++            "(R17 v1 is DCP1); got decode_context_parallel_size="
++            f"{dcp_world_size}. Disable VLLM_USE_B12X_SPARSE_INDEXER or run "
++            "DCP1, or fall back to the upstream DeepGEMM indexer path."
++        )
+ 
+ 
+@@ -495,69 +441,4 @@
+ 
+ 
+-
+-# --- fused DCP gather (decode) -------------------------------------------------
+-# At decode, the indexer's DCP top-k candidate all-gather and the MLA query-head
+-# all-gather (mla_attention.py, right before forward_mqa) are back-to-back on the
+-# same DCP group and data-independent. With VLLM_FUSED_DCP_GATHER=1 the indexer
+-# leaves its packed candidates here and MLA decode performs ONE all-gather over
+-# [q | candidates], then runs the stable top-k on the gathered candidates before
+-# forward_mqa. Results are byte-identical (same data, same kernels, one transport);
+-# it removes one collective per layer per step. Prefill keeps the immediate gather.
+-import os as _os
+-FUSED_DCP_GATHER = _os.environ.get("VLLM_FUSED_DCP_GATHER", "0") in ("1", "2")
+-FUSED_DCP_VERIFY = _os.environ.get("VLLM_FUSED_DCP_GATHER", "0") == "2"
+-_FUSED_STATS = {"layer": 0, "checked": 0, "mismatch": 0, "logged": 0}
+-_PENDING_DCP_TOPK: dict = {}
+-
+-
+-def dcp_topk_defer(packed: torch.Tensor, topk_indices: torch.Tensor, topk_tokens: int) -> None:
+-    if _PENDING_DCP_TOPK:
+-        raise RuntimeError("fused DCP gather: a deferred top-k candidate set was never consumed")
+-    _PENDING_DCP_TOPK["packed"] = packed
+-    _PENDING_DCP_TOPK["topk_indices"] = topk_indices
+-    _PENDING_DCP_TOPK["topk_tokens"] = topk_tokens
+-    if FUSED_DCP_VERIFY:
+-        # reference: the original two-gather path, into a scratch copy
+-        from vllm.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
+-            stable_topk_from_gathered_candidates_cutedsl,
+-        )
+-        ref = torch.empty_like(topk_indices)
+-        gathered = get_dcp_group().all_gather(packed, dim=1)
+-        stable_topk_from_gathered_candidates_cutedsl(gathered, topk_tokens, out=ref)
+-        _PENDING_DCP_TOPK["ref"] = ref
+-        _PENDING_DCP_TOPK["local_before"] = topk_indices.clone()
+-
+-
+-def dcp_topk_take():
+-    if not _PENDING_DCP_TOPK:
+-        return None
+-    d = dict(_PENDING_DCP_TOPK)
+-    _PENDING_DCP_TOPK.clear()
+-    return d
+-
+-
+-def dcp_topk_finish(gathered_candidates: torch.Tensor, topk_indices: torch.Tensor, topk_tokens: int,
+-                    ref: torch.Tensor | None = None) -> None:
+-    from vllm.model_executor.kernels.attention.dsa.dcp_indexer_cutedsl import (
+-        stable_topk_from_gathered_candidates_cutedsl,
+-    )
+-    stable_topk_from_gathered_candidates_cutedsl(gathered_candidates, topk_tokens, out=topk_indices)
+-    if FUSED_DCP_VERIFY and ref is not None:
+-        # set-compare per row (the kernel's output order is not deterministic)
+-        a = torch.sort(topk_indices, dim=-1).values
+-        b = torch.sort(ref, dim=-1).values
+-        bad = (a != b).any(dim=-1)
+-        _FUSED_STATS["checked"] += 1
+-        nbad = int(bad.sum().item())
+-        if nbad:
+-            _FUSED_STATS["mismatch"] += 1
+-            if _FUSED_STATS["logged"] < 20:
+-                _FUSED_STATS["logged"] += 1
+-                r = int(bad.nonzero()[0].item())
+-                print(f"[fused-dcp-verify] MISMATCH check#{_FUSED_STATS['checked']} rows_bad={nbad}/{bad.numel()} row{r}: fused_sorted[:6]={a[r,:6].tolist()} ref_sorted[:6]={b[r,:6].tolist()} fused_neg={(topk_indices[r]<0).sum().item()} ref_neg={(ref[r]<0).sum().item()}", flush=True)
+-        elif _FUSED_STATS["checked"] % 500 == 0:
+-            print(f"[fused-dcp-verify] ok: {_FUSED_STATS['checked']} checks, {_FUSED_STATS['mismatch']} mismatching", flush=True)
+-# --- end fused DCP gather ------------------------------------------------------
+-
+ def _merge_dcp_topk_global(
+     logits: torch.Tensor,
+@@ -568,5 +449,4 @@
+     cp_interleave: int,
+     row_starts: torch.Tensor | None = None,
+-    defer: bool = False,
+ ) -> None:
+     """Merge each DCP rank's local top-K into the global top-K.
+@@ -608,7 +488,4 @@
+         row_starts,
+     )
+-    if defer and FUSED_DCP_GATHER:
+-        dcp_topk_defer(packed, topk_indices, topk_tokens)
+-        return
+     gathered = get_dcp_group().all_gather(packed, dim=1)
+     stable_topk_from_gathered_candidates_cutedsl(
+@@ -836,6 +713,4 @@
+                 max_model_len=max_model_len,
+                 total_seq_lens=total_seq_lens,
+-                dcp_world_size=dcp_world_size,
+-                cp_kv_cache_interleave_size=cp_kv_cache_interleave_size,
+             )
+             warmup_k_rows = _get_b12x_paged_indexer_profile_warmup_k_rows(
+@@ -1011,4 +886,9 @@
+                 # the (per-request) block table can be row-shared across the
+                 # chunk's query rows without an explicit expand/pack step.
++                if chunk.num_reqs != 1:
++                    raise RuntimeError(
++                        "B12X sparse prefill requires single-request chunks so "
++                        "the page table can be row-shared without packing."
++                    )
+                 if chunk.local_total_seq_lens == 0:
+                     topk_indices.fill_(-1)
+@@ -1020,24 +900,6 @@
+                     cu_seqlen_ke - cu_seqlen_ks,
+                 )
+-                if chunk.num_reqs == 1:
+-                    # single request: row-share its block table (0xdfi's path)
+-                    block_table = chunk.block_table[:1].expand(
+-                        int(q_slice.shape[0]), int(chunk.block_table.shape[1])
+-                    )
+-                    shared_pt = True
+-                else:
+-                    # multi-request chunk: build a per-row block table by
+-                    # gathering each query row's request row. token_to_seq maps
+-                    # every row in the chunk to its request; one device gather,
+-                    # no host sync. This is the packing step the public port
+-                    # skipped, and it is what lets the B12X indexer serve
+-                    # concurrent prefills.
+-                    t2s = chunk.token_to_seq[: int(q_slice.shape[0])].to(torch.long)
+-                    block_table = chunk.block_table.index_select(0, t2s)
+-                    shared_pt = False
+-                need_dcp = dcp_world_size > 1
+-                topk_scores = (
+-                    torch.empty_like(topk_indices, dtype=torch.float32)
+-                    if need_dcp else None
++                block_table = chunk.block_table[:1].expand(
++                    int(q_slice.shape[0]), int(chunk.block_table.shape[1])
+                 )
+                 _run_b12x_paged_topk(
+@@ -1050,13 +912,7 @@
+                     topk_indices=topk_indices,
+                     topk_tokens=topk_tokens,
+-                    topk_scores=topk_scores,
+-                    shared_page_table=shared_pt,
++                    shared_page_table=True,
+                 )
+                 topk_indices.masked_fill_(row_has_no_kv[:, None], -1)
+-                if need_dcp:
+-                    _merge_b12x_dcp_topk(
+-                        topk_scores, topk_indices, topk_tokens,
+-                        dcp_rank, dcp_world_size, cp_kv_cache_interleave_size,
+-                    )
+                 continue
+ 
+@@ -1149,12 +1005,10 @@
+                         b12x_next_n, dim=0
+                     ).contiguous()
+-            # Padded batches are fine once seq_lens is rank-1: the flatten path
+-            # gives padded rows seq_len 0, and those rows are masked to -1
+-            # below (the prefill branch already does this). Only a genuinely
+-            # 2-D contract that could not be normalized is refused.
+-            if b12x_seq_lens.dim() != 1:
++            if decode_metadata.requires_padding or b12x_seq_lens.dim() != 1:
+                 raise RuntimeError(
+-                    "b12x sparse indexer decode requires a rank-1 seq_lens "
+-                    "contract after native-spec normalization; "
++                    "b12x sparse indexer decode requires an unpadded rank-1 "
++                    "seq_lens contract after native-spec normalization; "
++                    "refusing to fall back to DeepGEMM. "
++                    f"requires_padding={decode_metadata.requires_padding}, "
+                     f"seq_lens_shape={tuple(decode_metadata.seq_lens.shape)}, "
+                     f"normalized_seq_lens_shape={tuple(b12x_seq_lens.shape)}, "
+@@ -1169,9 +1023,4 @@
+             # this port carries whatever `decode_metadata.active_width` the
+             # ported indexer.py builder fills in (None if not applicable).
+-            need_dcp = dcp_world_size > 1
+-            topk_scores = (
+-                torch.empty_like(topk_indices, dtype=torch.float32)
+-                if need_dcp else None
+-            )
+             _run_b12x_paged_topk(
+                 q_fp8=q_quant[:num_decode_tokens].contiguous(),
+@@ -1184,14 +1033,5 @@
+                 topk_indices=topk_indices,
+                 topk_tokens=topk_tokens,
+-                topk_scores=topk_scores,
+-            )
+-            # padded / empty rows: no KV to attend, exactly like prefill's
+-            # row_has_no_kv masking.
+-            topk_indices.masked_fill_((seq_lens[:num_decode_tokens] == 0)[:, None], -1)
+-            if need_dcp:
+-                _merge_b12x_dcp_topk(
+-                    topk_scores, topk_indices, topk_tokens,
+-                    dcp_rank, dcp_world_size, cp_kv_cache_interleave_size,
+-                )
++            )
+             return topk_indices_buffer
+ 
+@@ -1338,7 +1178,4 @@
+                 dcp_world_size,
+                 cp_kv_cache_interleave_size,
+-                # fused DCP gather: only when topk_indices is the live buffer view
+-                # (no unpack step follows) so the deferred finish lands in place.
+-                defer=not decode_metadata.requires_padding,
+             )
+ 
+@@ -1444,5 +1281,5 @@
+             # forward pass.
+             _ensure_b12x_sparse_indexer_supported()
+-            # DCP>1 supported via _merge_b12x_dcp_topk (concurrency-first port).
++            _assert_dcp1_for_b12x(self.dcp_world_size)
+         elif current_platform.is_cuda() and not has_deep_gemm():
+             raise RuntimeError(

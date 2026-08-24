@@ -1,0 +1,12 @@
+--- ours
++++ his
+@@ -68,4 +68,9 @@
+         # [max_num_reqs]
+         seeds: torch.Tensor,
++        # Scheduler-selected speculative depth for this step (R9/r15 port:
++        # `num_spec_tokens_to_schedule` plumbing). None means "use the
++        # speculator's configured max depth" (static schedule / no dynamic
++        # speculative decoding).
++        num_speculative_tokens: int | None = None,
+         num_tokens_across_dp: torch.Tensor | None = None,
+         dummy_run: bool = False,

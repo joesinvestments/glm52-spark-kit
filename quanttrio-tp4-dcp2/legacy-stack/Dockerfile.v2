@@ -1,0 +1,4 @@
+FROM glm52-legacy:challenger
+COPY draft-quant.patch /tmp/dq.patch
+RUN cd /usr/local/lib/python3.12/dist-packages && \
+    patch -p1 --dry-run < /tmp/dq.patch && patch -p1 < /tmp/dq.patch && rm /tmp/dq.patch

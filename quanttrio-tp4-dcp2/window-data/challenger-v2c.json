@@ -1,0 +1,1 @@
+{"cell": "challenger-v2c-quantgreedy", "storm": {"wall_s": 84.3, "errors": 0, "prefill_toks_per_s": 350.6, "agg_decode_toks_per_s": 4.6, "acceptance_pct": 36.6}, "c1": {"decode_toks_per_s": 7.6, "prefill_toks_per_s": 1854.6, "acceptance_pct": 44.1}, "deep30k": {"wall_s": 267.5, "prefill_toks_per_s": 541.4}}

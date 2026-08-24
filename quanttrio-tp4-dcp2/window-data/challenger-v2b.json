@@ -1,0 +1,1 @@
+{"cell": "challenger-v2b", "storm": {"wall_s": 88.3, "errors": 0, "prefill_toks_per_s": 375.0, "agg_decode_toks_per_s": 4.3, "acceptance_pct": 40.6}, "c1": {"decode_toks_per_s": 6.5, "prefill_toks_per_s": 595.9, "acceptance_pct": 61.4}, "deep30k": {"wall_s": 301.6, "prefill_toks_per_s": 478.9}}

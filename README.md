@@ -68,6 +68,27 @@ benchmarks/        probes: correctness gate, mid-context, long-context A/B/C, sh
 docs/              RECOMMENDATION, DSPARK, NVFP4_DS_MLA_RECORD, SESSION-2026-08-17
 ```
 
+## Consolidated sub-projects (2026-08-24)
+
+This is the single GLM-5.2 repo. Three formerly separate repos were folded in whole and
+archived in place with pointers back here; their own READMEs remain at each subdirectory
+root and their histories remain browsable in the archived originals.
+
+```
+campaign-2026-08/       the 3-day tuning campaign record: CAMPAIGN-STATE.md (master doc),
+                        patches 001-004, TailQuant pipeline, probe harness, comm floor
+                        bench, o14 overlay diffs, battery results JSONLs
+                        (was: glm52-campaign)
+quanttrio-tp4-dcp2/     the QuantTrio legacy-stack deployment record: adaptive MTP, the
+                        indexer law, negative results, legacy launchers incl. the k=4
+                        production lineage, sm12x kernel set
+                        (was: GLM-5.2-QuantTrio-TP4-DCP2-4x-DGX-Spark)
+aeon-crossnode-graphs/  GLM-5.2 unpruned at TP=4+DCP=4 on the AEON vLLM 0.27.1 sm_121a
+                        image: cross-node CUDA graphs captured, gate passed, parity; plus
+                        full-NVFP4 GLM boot findings
+                        (was: glm52-aeon-crossnode-graphs)
+```
+
 ## Install on a fleet
 
 ```bash

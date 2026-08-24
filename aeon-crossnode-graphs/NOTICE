@@ -1,0 +1,14 @@
+Credits, in the order the work depends on them.
+
+AEON (AEON-7/vllm-ultimate-dgx-spark): the sm_121a vLLM 0.27.1 rebuild this image is built FROM, including
+  the DSpark/DFlash speculative stack, the Triton NVFP4 KV path, and the DGX Spark runtime patches.
+0xdfi (GLM-5.2-1M-4x-DGX-Spark): the b12x sparse-MLA integration, the O14 overlay set, and the measured
+  4x Spark recipe most of the overlays descend from (per-file origin in overlays/PROVENANCE.md).
+local-inference-lab/b12x: the CuTe-DSL sparse-MLA and indexer kernels for GB10.
+bird (GLM-spark, vllm-lil): the weight_utils tolerance overlay and the DSpark ring-drafting work that
+  informed the launch flags.
+vLLM contributors: the DeepSeek-V4 sm12x fallback lineage carried unchanged.
+QuantTrio: the Int4-Int8Mix GLM-5.2 checkpoint. NVIDIA: the modelopt NVFP4 GLM-5.2 checkpoint.
+
+Everything in this repository is Apache-2.0 (LICENSE). Copyright holders of the upstream files remain
+the upstream authors.

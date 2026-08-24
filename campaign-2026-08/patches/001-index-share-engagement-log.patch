@@ -1,0 +1,30 @@
+Patch 001: surface whether index_share_for_mtp_iteration actually engages.
+
+0xdfi/glm-5.2-dgx-spark-vllm027 findings.md flags this as an unconfirmed open
+question: the QuantTrio checkpoint sets the flag in config.json, but engagement
+depends on the draft model exposing set_skip_topk - and if the hook is missing
+the sharing silently never happens. One boot with this patch answers it from
+the serve log. No behavior change when the flag is false.
+
+Applies to vllm v0.27.0 (vllm/v1/spec_decode/llm_base_proposer.py).
+--- a/vllm/v1/spec_decode/llm_base_proposer.py
++++ b/vllm/v1/spec_decode/llm_base_proposer.py
+@@ -1612,6 +1612,18 @@
+             draft_hf_config, "index_share_for_mtp_iteration", False
+         )
+ 
++        if self._share_mtp_indices:
++            _hook_owner = getattr(self.model, "model", None)
++            _hook_ok = hasattr(_hook_owner, "set_skip_topk")
++            logger.info(
++                "[glm52-collab] index_share_for_mtp_iteration=true resolved "
++                "from draft config (%s); set_skip_topk hook %s; indexer "
++                "sharing %s.",
++                getattr(draft_hf_config, "name_or_path", "unknown"),
++                "found" if _hook_ok else "MISSING",
++                "ENGAGED" if _hook_ok else
++                "will silently NOT engage (flag set, hook absent)",
++            )
+         if self.use_local_argmax_reduction:
+             if not hasattr(self.model, "get_top_tokens"):
+                 raise ValueError(

@@ -1,0 +1,4 @@
+{"cell": "cellK2-nvfp4", "segment": "c1-summary", "verdict": "VALID", "content_class": "summary/peak", "concurrency": 1, "wall_s": 21.4, "prefill_toks_per_s": 873.4, "decode_toks_per_s": 20.6, "acceptance_pct": 75.0}
+{"cell": "cellK2-nvfp4", "segment": "c1-prose", "verdict": "VALID", "content_class": "prose/sustained", "concurrency": 1, "wall_s": 62.7, "prefill_toks_per_s": 909.7, "decode_toks_per_s": 19.3, "acceptance_pct": 46.5}
+{"cell": "cellK2-nvfp4", "segment": "storm-c12", "verdict": "VALID", "content_class": "summary/peak", "concurrency": 12, "wall_s": 82.0, "prefill_toks_per_s": 340.6, "decode_toks_per_s": 1.5, "acceptance_pct": 63.0}
+{"cell": "cellK2-nvfp4", "segment": "deep30k", "verdict": "VALID", "content_class": "summary/deep", "concurrency": 1, "wall_s": 92.1, "prefill_toks_per_s": 632.1, "decode_toks_per_s": 24.8, "acceptance_pct": 77.3}

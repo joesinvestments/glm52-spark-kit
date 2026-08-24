@@ -1,0 +1,3 @@
+FROM glm52-v027:deepgemm-fix
+COPY patch_masked_mha.py /tmp/pm.py
+RUN python3 /tmp/pm.py && rm /tmp/pm.py

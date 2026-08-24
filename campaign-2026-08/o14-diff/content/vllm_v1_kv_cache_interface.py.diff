@@ -1,0 +1,40 @@
+--- ours
++++ his
+@@ -74,17 +74,8 @@
+     if kv_cache_dtype == "fp8_per_token_head":
+         return KVQuantMode.FP8_PER_TOKEN_HEAD
+-    if kv_cache_dtype == "nvfp4":
++    if kv_cache_dtype in ("nvfp4", "nvfp4_ds_mla"):
+         return KVQuantMode.NVFP4
+     if isinstance(kv_cache_dtype, str) and kv_cache_dtype.startswith("turboquant_"):
+         return KVQuantMode.TURBOQUANT
+-    if kv_cache_dtype == "nvfp4_ds_mla":
+-        # Compact GLM NVFP4 MLA record read by the b12x sparse-MLA kernel.
+-        # Semantically identical to fp8_ds_mla from vLLM's point of view: one
+-        # per-layer outer scale, packed layout owned entirely by the backend
+-        # (get_kv_cache_shape returns the 368-byte record). Mapping to NONE
+-        # made attn_utils pass cache_dtype="auto" to the backend, which then
+-        # returned head_size and the reshape died. NOT KVQuantMode.NVFP4 --
+-        # that is the generic non-MLA fp4 KV path with its own kernels.
+-        return KVQuantMode.FP8_PER_TENSOR
+     if isinstance(kv_cache_dtype, str) and kv_cache_dtype.startswith("fp8"):
+         return KVQuantMode.FP8_PER_TENSOR
+@@ -417,8 +408,6 @@
+     def real_page_size_bytes(self) -> int:
+         if self.cache_dtype_str == "nvfp4_ds_mla":
+-            # GLM compact NVFP4 MLA record read by the b12x sparse-MLA kernel
+-            # (KV_FP8_ROPE=1 layout): 256B packed E2M1 NoPE + 32B E4M3
+-            # group-16 scales + 4B fp32 RoPE scale + 12B pad + 64B E4M3 RoPE
+-            # = 368B per token, 56% of the 656B fp8_ds_mla record.
++            # 368 B/token: 256 B packed E2M1 latent + 32 B raw E4M3
++            # group scales + 16 B FP32-scale/pad header + 64 B E4M3 RoPE.
+             return self.block_size * 368
+         if self.cache_dtype_str == "fp8_ds_mla":
+@@ -662,4 +651,7 @@
+     @property
+     def real_page_size_bytes(self) -> int:
++        if self.cache_dtype_str == "nvfp4_ds_mla":
++            # Same 368-byte compact ABI as MLAAttentionSpec.
++            return self.storage_block_size * 368
+         if self.model_version == "deepseek_v4" and self.cache_dtype_str == "fp8_ds_mla":
+             # DeepseekV4 FlashMLA: 448B NoPE + 128B RoPE + 8B fp8 scale = 584B

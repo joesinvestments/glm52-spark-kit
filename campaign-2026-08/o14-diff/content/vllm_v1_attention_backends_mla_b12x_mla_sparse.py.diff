@@ -1,0 +1,60 @@
+--- ours
++++ his
+@@ -34,13 +34,4 @@
+ import numpy as np
+ import torch
+-
+-# --- SM12x: the sparse-attn-indexer's own internal top-k computation
+-# (vllm.model_executor.layers.sparse_attn_indexer) calls DeepGEMM's compiled
+-# fp8_fp4_paged_mqa_logits/fp8_fp4_mqa_logits natively, unconditionally,
+-# unrelated to B12X_MLA_SPARSE handling the actual attention math -- those
+-# compiled kernels assert on sm_121a the same way FlashMLA's native ops did.
+-# Reuses the already-proven fallback from tonight's own FLASHMLA_SPARSE fix.
+-from vllm.v1.attention.backends.mla import patch_deep_gemm_ops as _sm12x_dgo  # noqa: E402
+-_sm12x_dgo.apply()
+ 
+ from vllm import _custom_ops as ops
+@@ -493,43 +484,4 @@
+     # disabled.
+     supports_dense_mha_prefill: ClassVar[bool] = False
+-
+-    def do_kv_cache_update(
+-        self,
+-        kv_c_normed: torch.Tensor,
+-        k_pe: torch.Tensor,
+-        kv_cache: torch.Tensor,
+-        slot_mapping: torch.Tensor,
+-        kv_cache_dtype: str,
+-        k_scale: torch.Tensor,
+-    ) -> None:
+-        """Route the compact NVFP4 record to the b12x-format writer.
+-
+-        The stock path is ``ops.concat_and_cache_mla``, a CUDA op that knows
+-        the 656-byte fp8_ds_mla record but not the 368-byte nvfp4_ds_mla one.
+-        The public b12x tree ships the READER for that record (traits/io/
+-        decode_math) but no writer; ``nvfp4_ds_mla_writer`` is that writer,
+-        derived from the reader's dequant so the two compose to identity.
+-        Every other dtype falls through to the stock op unchanged.
+-        """
+-        if kv_cache_dtype == "nvfp4_ds_mla" and kv_cache.numel() > 0:
+-            from vllm.v1.attention.backends.mla.nvfp4_ds_mla_writer import (
+-                write_to_kv_cache,
+-            )
+-            # Same per-layer outer scale the reader receives as latent_scale
+-            # (layer._k_scale_float == k_scale). Pass the TENSOR: dividing by
+-            # it is a device op. NO .item() here -- this runs inside CUDA graph
+-            # capture and a host sync invalidates the capture.
+-            latent_scale = k_scale if (k_scale is not None and k_scale.numel() == 1) else 1.0
+-            write_to_kv_cache(
+-                kv_cache,
+-                kv_c_normed,
+-                k_pe.squeeze(1) if k_pe.dim() == 3 else k_pe,
+-                slot_mapping.flatten(),
+-                latent_scale=latent_scale,
+-            )
+-            return
+-        return super().do_kv_cache_update(
+-            kv_c_normed, k_pe, kv_cache, slot_mapping, kv_cache_dtype, k_scale
+-        )
+ 
+     def __init__(

@@ -1,0 +1,11 @@
+--- ours
++++ his
+@@ -45,4 +45,8 @@
+     "fp8_inc": torch.float8_e4m3fn,
+     "fp8_ds_mla": torch.uint8,
++    # B12X: 368-byte packed nvfp4 DeepSeek-MLA KV-cache record (512 NoPE
++    # nvfp4 nibble-packed + block scales + 128 RoPE bf16-as-uint8, see
++    # ports/vllm/v1/attention/backends/mla/b12x_mla_sparse.py for the
++    # record layout / dispatch; storage dtype is uint8 like fp8_ds_mla).
+     "nvfp4_ds_mla": torch.uint8,
+     "turboquant_k8v4": torch.uint8,

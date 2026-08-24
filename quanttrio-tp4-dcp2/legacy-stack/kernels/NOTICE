@@ -1,0 +1,45 @@
+Vendored Triton sparse-MLA kernels for GLM-5.2 on GB10 (sm_121a)
+================================================================
+
+The 10 .py files in this directory are third-party kernels, redistributed here
+under the Apache License 2.0. They are NOT original to this repository.
+
+Origin
+------
+  Upstream:  CosmicRaisins/glm-5.2-gb10  (kernels/)
+             https://github.com/CosmicRaisins/glm-5.2-gb10
+  License:   Apache-2.0
+  Also credited by upstream: ciprianveg (sparse-MLA + DeepGEMM-bypass zip).
+
+Why they are vendored here
+--------------------------
+Originally this repo told followers to copy these files live from the upstream
+repo. Upstream drifted, and a fresh checkout could pair a `deepseek_v2.py` that
+imports `fused_indexer_q_rope_quant` with a `sparse_attn_indexer.py` that no
+longer exports it, producing an ImportError at model load (repo issue #5).
+
+To make the recipe reproducible we pin a KNOWN-GOOD, MATCHED set here — the exact
+files that serve GLM-5.2 in production on our 4x DGX Spark cluster. In particular
+`sparse_attn_indexer.py` DOES export `fused_indexer_q_rope_quant`, which
+`deepseek_v2.py` imports. Do not overwrite these with a fresh upstream pull
+unless you re-verify the pair.
+
+No functional modifications were made to these files versus the upstream copies
+we deployed; they are redistributed verbatim for reproducibility.
+
+Files
+-----
+  b12x_sparse_helpers.py
+  deepseek_v2.py
+  flashmla_sparse.py
+  patch_flashmla_ops.py
+  sm12x_deep_gemm_fallbacks.py
+  sm12x_mqa.py
+  sm12x_sparse_mla_attn.py
+  sparse_attn_indexer.py
+  sparse_mla_env.py
+  sparse_mla_kernels.py
+
+The Apache-2.0 license text governing these files is available at
+https://www.apache.org/licenses/LICENSE-2.0 and in the upstream repository.
+Original copyright remains with the upstream authors.
