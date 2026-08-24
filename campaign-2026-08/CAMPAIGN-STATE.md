@@ -174,6 +174,30 @@ D4. **Spec-path forensics** (only if k5 economics still wanted)
     during multi-size ladder capture would name the deadlock.
 D5. **index_topk_pattern sweep** - config-only, zero risk, untried anywhere.
 
+## 8b. Roadmap additions (2026-08-24, ideation-lane handoff adopted)
+
+D6. **Drafter finetune targeting prose acceptance** - candidate #2 behind D1.
+    Baseline: peak acceptance ~1.8 vs prose ~1.15. At k=2 tokens/step ~= the
+    acceptance number, so prose decode runs at ~60 percent of peak-class.
+    Moving prose acceptance 1.15 -> 1.5 takes prose C1 ~12 -> ~15.5 with zero
+    serving changes, and STACKS with TailQuant. Rig + finetuned drafter
+    confirmed staged (ASK-RESULTS-20260824.md ask 3). Ornith corollary: an
+    uncalibrated donor head measured WORSE than no spec-decode (7.1 percent),
+    so calibration to real traffic is the entire game. Measure acceptance at
+    production temperature, matched content class.
+
+D5+. **Cudagraph ladder coverage at real concurrency** - config lever for the
+    next packed window. Ladder [3,6,9,12] covers C4 (needs 12) but NOT C8
+    (needs 24): concurrent x8 likely decodes on a non-captured path today.
+    VERIFY from metrics/logs whether production serves C8; if yes and KV
+    headroom allows, extend ladder to [3,6,9,12,24] and check the KV delta.
+
+WINDOW RULE. Clean boots are the scarce resource (one clean boot per reboot
+cycle). Every restart window gets PACKED: profiler env armed + sweep cells +
+ladder-coverage cell + standard battery, manifest designed before asking for
+the window. Battery runs on NON-instrumented boots only; label loudly if a
+profiler-armed boot must carry a battery.
+
 ## 9. Operating notes for whoever runs the next session
 
 - Production restart procedure: stop vllm_slot containers fleet-wide,
