@@ -83,6 +83,8 @@ K4 (hot) and K3 (cold). No curation.
       Gap vs serving-grade = exactly the mapped reuse items: Hadamard
       pre-transform (outlier spreading), LDLQ ordering, beam>greedy, g_scale -
       all present in vendored exllamav3 pipeline, none yet ported.
-- [ ] e. batch harness: designable tonight, NOT launched - full-matrix encode
+- [ ] e. batch harness: encoder VECTORIZED (encode_vec2.py, 11ms/tile,
+      bit-identical to scalar greedy on cross-check tiles => full matrix
+      ~2.5h single-thread); harness launch deferred until quality levers land - full-matrix encode
       at current CPU throughput is ~hours/matrix and the quality levers above
       change the numbers anyway; run it after those land
