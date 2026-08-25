@@ -120,3 +120,17 @@ Gate flag: prepare chain needs b3 kernel import chain => one CPU-only container 
 gx10-1 (--gpus none, MemAvailable-gated, bounded minutes, synth-scale input), purpose-
 limited to uniform-planning confirmation + oracle capture. AWAITING JOE'S WORD -
 standing rule keeps node actions gated; all oracle inputs prepared locally meanwhile.
+
+## ORACLE RUN RESULT (2026-08-25, Joe-approved rider)
+oracle_result_20260825.json (committed):
+- uncoupled uniform-K2 sqg_e4m3: PASSED manifest+extent+rate validation; halted ONLY at
+  "trellis_t256 W4A16 weights require CUDA storage, got cpu" - i.e. NO fail-closed
+  planning rejection exists for uniform rates (contrast A5 mixed rejection which fired
+  at pair-kind validation, much earlier). Final confirmation = same probe on CUDA
+  (containers-down rider; add to Window K passenger slot).
+- coupled uniform-K2: implemented block widths are (pre=512, post=128) ONLY; toy
+  geometry could not express it. Real geometry supports it (H6144%512=0, I2048%128=0).
+ENCODER TARGET LOCKED: uniform K2 sqg_e4m3, COUPLED, pre_block=512 post_block=128,
+per_expert_input_rotations=False, unit_hidden_rotations=True (production-qualified AND
+implementation-supported). Two-sided acceptance now: CUDA prepare pass (window rider)
++ round-trip values.

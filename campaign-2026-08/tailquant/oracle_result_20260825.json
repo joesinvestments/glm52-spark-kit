@@ -1,0 +1,10 @@
+{
+ "uncoupled": {
+  "planning": "FAIL",
+  "error": "ValueError: trellis_t256 W4A16 weights require CUDA storage, got cpu"
+ },
+ "coupled": {
+  "planning": "FAIL",
+  "error": "ValueError: coupled BTX preparation currently implements pre/post Hadamard blocks (512, 128); the manifest declares (128, 128)"
+ }
+}
