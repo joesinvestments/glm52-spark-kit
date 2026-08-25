@@ -88,3 +88,20 @@ K4 (hot) and K3 (cold). No curation.
       ~2.5h single-thread); harness launch deferred until quality levers land - full-matrix encode
       at current CPU throughput is ~hours/matrix and the quality levers above
       change the numbers anyway; run it after those land
+
+## LANE-2A VERDICT (2026-08-25, directive 2)
+Uniform-K2-sqg_e4m3 requires NO calibration input: confirmed from btx_synth config
+surface (uniform rates declare bits, not per-expert tables; nothing consumes
+activations) - router histograms were solely the hot/cold placement consumer, now dead.
+Encoder input = weights alone. B1 stays deprioritized per directive.
+
+Blocking unknown named (work item, has oracle): exact SQG trellis STATE TRANSITION for
+CPU encode - stored bits per group are K-bit branches, history is carried state;
+sqg_e4m3.py gives rank=frozen_graph(history,branch)->staircase label exactly, but the
+history-update rule + bit-order across the 16-channel group must be pinned before the
+harness emits servable bytes. ORACLE available offline:
+tests/quantization/test_sqg_e4m3.py validates builders against
+sqg_xor_cheb_t12_direct_lut_cpu() - candidate state machines verify without GPU.
+K2 constraint note: mcg supports K3-K6 only => K2 MUST be sqg_e4m3 (no mcg shortcut).
+Coupled-vs-uncoupled: production-QUALIFIED is coupled K2; uncoupled acceptance by
+reader/planning unverified - second open item, same oracle bootstraps the check.
