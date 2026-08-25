@@ -226,3 +226,8 @@ earlyoom/watchdog inactive everywhere. Awaiting GO for FORCE_RELAUNCH production
   peak_c1   15.46        (base 15.5)    flat
   peak_c4   31.51        (base 37.6)    WORSE
 VERDICT: REJECT ladder [3,6,9,12,24,48]. Off-graph-at-C16 hypothesis did not pay: KV shrink + larger graph footprint dominate. GSM8K cell deferred (baseline not yet established - G1 pause ordering); candidate would need re-serve post-window for accuracy gate. Rollback = config revert (folded into A3 relaunch from pristine launcher).
+[A3 11:30Z] BOOT PASS (21min, k=4 ladder [5,10,15,20] active; vllm advisory re max_num_batched_tokens noted). BATTERY win1-a3-k4 vs baseline:
+  prose_c1 10.47/9.75 (12.1/11.9) WORSE   prose_c4 20.76/22.55 (29.0) MUCH WORSE
+  prose_c2 17.36 (17.3) flat              peak_c1 16.36 (15.5) BETTER (+5%)
+  peak_c4 33.10 (37.6) worse              acceptance: peak acc 2.82/2.65 (vs 1.84)
+VERDICT: REJECT k=4 - fails pass bar (must beat on prose AND peak). Independently re-confirms campaign falsification of deeper-speculation economics AT PRODUCTION SHAPE with the previously-missing recorded A/B (ask7): higher acceptance does not pay on public mp/V1 stack.
