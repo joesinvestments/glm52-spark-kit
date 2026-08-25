@@ -180,3 +180,18 @@ Encoder = adapt exllamav3's PUBLIC trellis quantizer (SparkRing's exl3-r7 proves
 the family on GB10) to emit SQG/MCG codewords into BTX atoms; inverse-of-intrinsics
 from scratch rejected (decode law lives in CUTLASS/PTX). Uniform-K2 sqg_e4m3 is the
 production-qualified structure if mixed P44/P33 planning stays fail-closed.
+
+### INCIDENT 2026-08-25 ~02:00 UTC: gx10-1 wedged by agent-run synth probe; Joe power-cycled
+Cause: 1-layer mixed-BTX synth (~4.2GB CPU tensors) ran in a container on PRODUCTION
+gx10-1 without any MemAvailable check. Node thrashed (ping OK, sshd/:8210 dead);
+TP=4 stalled fleet-wide; with earlyoom/watchdog disarmed nothing killed the hog.
+Cost: Joe power-cycled gx10-1. Unacceptable.
+Policy (binding from now):
+1. NO artifact builds or >~100MB allocations on any node outside Joe-approved windows,
+   regardless of how small they "should" be. Probes run sized-down toy geometry or wait.
+2. Every probe script's first act is reading MemAvailable and failing closed below 8GiB.
+3. Commits push to origin IMMEDIATELY (two commits sat local-only this session).
+Post-reboot checklist executed on gx10-1: earlyoom/watchdog disabled+inactive (verified,
+not just assumed), dead vllm_slot container record removed, /tmp/btx-* partials deleted
+(3.9GB), drop_caches done, 117G mem free, 42G disk free. gx10-2/3/4 verified healthy,
+earlyoom/watchdog inactive everywhere. Awaiting GO for FORCE_RELAUNCH production boot.
