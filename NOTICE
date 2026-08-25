@@ -3,10 +3,54 @@ Copyright 2026 joesinvestments
 
 Licensed under the Apache License, Version 2.0.
 
-This kit carries, unchanged or derived, overlay files from:
-  0xdfi, GLM-5.2-Harness-O14-4x-DGX-Spark (Apache-2.0)
+This repository carries, unchanged or derived, work from the following people
+and projects. Per-file provenance for the kit overlays is in MANIFEST.json;
+each consolidated subdirectory keeps its own NOTICE with its full credit chain.
+See THIRD_PARTY_NOTICES.md for the complete aggregated table with links and
+licenses.
+
+Kit overlays (repo root):
+  0xdfi -- GLM-5.2-Harness-O14-4x-DGX-Spark (Apache-2.0): the O14 overlay set
+    this kit descends from, and the probe battery protocol probe.py implements.
     https://github.com/0xdfi/GLM-5.2-Harness-O14-4x-DGX-Spark
-  vLLM project and contributors (Apache-2.0), base image vllm/vllm-openai:v0.27.0
-  B12X (pip package), sparse-MLA kernels for GB10 / sm_121a
-Per-file provenance, including which files are identical to 0xdfi's and which
-are derived here, is recorded in MANIFEST.json.
+  CosmicRaisins -- glm-5.2-gb10 (Apache-2.0): the adaptive-MTP overlays under
+    overlays/vllm/v1/spec_decode/dynamic/ are carried verbatim from their repo
+    (commit-pinned in each file header), themselves a forward-port of the
+    acceptance-length controller from local-inference-lab/vllm (Luke Alonso),
+    with Aiden Le's acceptance-length adaptation in the lineage.
+    https://github.com/CosmicRaisins/glm-5.2-gb10
+  local-inference-lab -- b12x (pip package): the CuTe-DSL sparse-MLA and
+    indexer kernels for GB10 / sm_121a, and the vLLM fork lineage the
+    acceptance-length controller descends from.
+  vLLM project and contributors (Apache-2.0), base image
+    vllm/vllm-openai:v0.27.0.
+
+Consolidated subdirectories (each carries its own NOTICE / provenance file):
+  quanttrio-tp4-dcp2/ -- legacy-stack deployment. Credit chain in its NOTICE:
+    CosmicRaisins (Triton sparse-MLA kernels, draft-quant patch, adaptive-MTP
+    forward-port), ciprianveg (mod scripts, sparse-MLA + DeepGEMM-bypass),
+    tonyd2wild (kernel redistribution, indexer-MTP fix, NVFP4 KV port),
+    penguinchang (decode-aware scheduler lineage), Aiden Le (acceptance-length
+    adaptation), danielwoz (E2M1 store kernel), BTankut (380K recipe,
+    pinned-pool discipline), drowzeys (parallel nvfp4-MLA KV).
+  aeon-crossnode-graphs/ -- AEON-image record. Credit chain in its NOTICE:
+    AEON-7 (vllm-ultimate-dgx-spark rebuild), 0xdfi, local-inference-lab/b12x,
+    bird (weight_utils overlay, DSpark ring-drafting), vLLM contributors,
+    QuantTrio and NVIDIA (checkpoints).
+  campaign-2026-08/sircl/ -- vendored full tree of FujitsuPolycom's SparkRing
+    SIRCL transport (Apache-2.0), with its upstream LICENSE, NOTICE (including
+    NVIDIA NCCL portions), and THIRD_PARTY_NOTICES.md intact.
+    https://github.com/FujitsuPolycom/sparkring
+  dspark-training/ -- bird's GLM-spark speculator-training pipeline
+    (Apache-2.0), provenance in dspark-training/PROVENANCE.md, including
+    b1rd's quant-matched finetuned drafter checkpoint.
+
+Model weights served or referenced: QuantTrio (GLM-5.2 Int4-Int8Mix unpruned),
+NVIDIA (modelopt NVFP4 GLM-5.2), brandonmusic (GLM-5.2 EXL3 3.5-bpw,
+referenced in campaign records).
+
+Benchmark tooling: llm-decode-bench by local-inference-lab (MIT) is the
+instrument named in campaign performance comparisons; probe.py is an
+independent stdlib implementation of 0xdfi's published protocol.
+
+Errors of integration are ours, not the upstream authors'.
