@@ -1,0 +1,36 @@
+{
+  "codebook": "sqg_e4m3",
+  "geometry": {
+    "atom_channels": 32,
+    "atom_slots": 8,
+    "hidden_size": 256,
+    "intermediate_size": 256,
+    "moe_layer_indices": [
+      0
+    ],
+    "num_experts": 8
+  },
+  "hadamard": {
+    "coupled": true,
+    "per_expert_input_rotations": false,
+    "post_block": 128,
+    "pre_block": 128
+  },
+  "kind": "btx-manifest",
+  "layers": {
+    "0": {
+      "file": "btx-layer-00000.safetensors",
+      "sha256": "17aff06e83a6b82cd48051c0ca10eaef95bd15a1ec7cb690383b9657768b698c"
+    }
+  },
+  "layout": {
+    "atom_row_alignment": 4096,
+    "extent_alignment_slots": 4,
+    "extent_barriers": []
+  },
+  "rates": {
+    "bits": 2,
+    "structure": "uniform"
+  },
+  "schema": "btx-atoms-v1"
+}
