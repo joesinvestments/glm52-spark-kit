@@ -210,3 +210,4 @@ earlyoom/watchdog inactive everywhere. Awaiting GO for FORCE_RELAUNCH production
   operator approves; exact-error capture is its purpose there.
 - GSM8K chain: paused cleanly pre-recovery, .resume.json intact, resumes on
   operator's production-verified signal.
+[HB 2026-08-25T03:15Z] P0 GSM8K chain running (run1 started 06:50Z local log); P1a vendored exllamav3 (d52b94f); P1b DESIGN-v3 pushed (9772660): MCG multiplier identical both families, SQG pure-torch graph extracted; P1c in progress - 3.2GB shard cat'd to Mac, sliced to 26MB expert-pair tensors (E0 full + E1 down), bulk deleted. Whitelist note-question logged: byte-range extraction wanted dd/tail/head which strict whitelist excludes -> used whole-shard cat instead.
