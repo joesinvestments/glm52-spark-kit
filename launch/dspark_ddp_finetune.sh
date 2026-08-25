@@ -7,7 +7,9 @@
 #      MIN_ANCHOR, K (3), WINDOW (1024), LR.
 set -euo pipefail
 CAPD=${CAPD:-/var/tmp/glm-legacy/hf/dspark-capture/dcp4_redhat}
-SPEC=${SPEC:-/home/<node-user>/.cache/huggingface/hub/dspark-quanttrio-ft}
+SPEC=${SPEC:-$HOME/.cache/huggingface/hub/dspark-quanttrio-ft}
+# SPEC staging: rsync from Mac /Volumes/Storage/weights-staging/GLM-5.2-speculator.dspark-quanttrio-ft/
+# to the path above on ALL FOUR nodes before launching (provenance in dspark-training/PROVENANCE.md).
 OUT=${OUT:-$HOME/dspark-ft-out}
 IMAGE=${IMAGE:-vllm-b12x:v0.27.0-pinned}
 WORKERS=(${WORKER_IPS:-192.168.100.12 192.168.100.13 192.168.100.14})

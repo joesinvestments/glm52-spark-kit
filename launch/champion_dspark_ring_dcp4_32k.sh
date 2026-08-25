@@ -38,6 +38,13 @@ ENVV=(
   -e "KV_FP8_ROPE=1"
   -e "PYTHONUNBUFFERED=1"
   -e "VLLM_USE_B12X_SPARSE_INDEXER=1" -e "VLLM_DSPARK_DRAFT_RING=1" -e "VLLM_DSPARK_DRAFT_WINDOW=1024"
+  # B3 capture wiring (dormant unless CAPTURE_DIR set on the host env):
+  #   CAPD=<host dir> ./champion_dspark_ring_dcp4_32k.sh arms collection
+  #   (patches dspark-ring 0012/0013; rank-0 only, VLLM_DSPARK_CAPTURE_EVERY
+  #    default 50 organic / 2 driven; natural-traffic rule: probe text excluded)
+  ${CAPD:+-e "VLLM_DSPARK_CAPTURE_DIR=$CAPD"}
+  ${CAPD:+-e "VLLM_DSPARK_CAPTURE_EVERY=${CAPTURE_EVERY:-50}"}
+  ${CAPD:+-v "$CAPD:$CAPD"}
 )
 
 MLA="/usr/local/lib/python3.12/dist-packages/vllm/v1/attention/backends/mla"

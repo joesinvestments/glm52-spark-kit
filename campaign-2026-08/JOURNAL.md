@@ -133,3 +133,50 @@ CPU affinity contract vs GB10 10 cores).
 Baseline (1319 items conc 30) then --compare-baseline noise-floor run, chained via
 results/gsm8k-salvage.log driver; resumes from .resume.json if interrupted.
 Status reports with first build progress report per directive.
+
+### 2026-08-25 (continued): B3 wired, B4 first two-node PASS, D5+ answered
+#### B4: upstream spark_transport COMPILES CLEAN unmodified (CUDA 13, sm_121, in glm52-collab:b3)
+Full tree vendored (125 files) after subset failed CMake; builds 100% incl all probes.
+Build recipe: b3 container + libibverbs-dev + pip cmake >= 3.24, -DCMAKE_CUDA_ARCHITECTURES=121.
+sircl-run:v1 runtime image committed on gx10-1/gx10-2 (base + libibverbs1).
+
+#### B4: TWO-NODE LINK TEST PASS (gx10-1 srv <-> gx10-2 cli, host memory, no GPU)
+spark_transport_probe --memory host --device rocep1s0f0 --gid 3 --bytes 65536:
+client RESULT p50 14.592us / mean 16.52us / p95 28.3us / max 55.9us (200/200);
+server VERIFY correct=true. End-to-end over switched fabric: device open, GID-3,
+RC QP INIT/RTR/RTS, TCP control rendezvous (:9415), RDMA payload verified.
+Context: NCCL 4-rank collectives 38-90us at decode shapes; raw floor ~10us@64KB;
+ag4_proto stalled at rdma_cm - SIRCL has no rdma_cm (raw verbs), GID index 3 is its
+default AND production NCCL_IB_GID_INDEX=3; production sets NO TOS so none needed.
+Remaining for Done: spark_tp4_probe GPU all-reduce micro-test on two nodes
+(needs VRAM headroom -> window item, rides first boot of anything).
+Ops notes: container default entrypoint ate --entrypoint bash twice (use it ALWAYS);
+container-root build dirs need sudo rm; server accept timeout is short - start
+client within seconds or pre-bake libs.
+
+#### B3: capture boot launcher WIRED (dormant by default)
+champion_dspark_ring_dcp4_32k.sh now passes VLLM_DSPARK_CAPTURE_DIR/_EVERY when
+CAPD=<dir> is exported (rank-0 only per patches 0012/0013); dspark_ddp_finetune.sh
+SPEC placeholder fixed + staging note added. CONFIRMED from source: collection
+CANNOT ride the MTP production path - autoregressive/speculator.py asserts
+method=="eagle3" before consuming aux_hidden_states; MTP captures would be
+[T,6144] final-layer only vs the rig's [T,HIDx5]=30720 combined stream. The
+DSpark-ring boot remains the one true capture vehicle (as ASK-RESULTS ask 3 said).
+
+#### D5+ ANSWERED from production logs (gx10-1 vllm_slot):
+Running-reqs histogram: 16 reqs = dominant state (1888 samples), then 5 (1148),
+15 (203), 3/1/4/6/2... With k=2 that is 30-48 token-steps against capture ladder
+max 12 -> most live decode runs OFF-graph today. Extend ladder to cover observed
+concurrency x(1+k) at next window: candidate [3,6,9,12,24,48] with KV-delta check.
+Also noted: cache hit readout 0.00% while serving (metric source suspect).
+
+#### GSM8K salvage: baseline run in flight, detached
+1319 items conc-30 client traffic against live production (started ~05:00 UTC);
+noise-floor run chains automatically via --compare-baseline; resumes from
+.resume.json if killed. Status reports with first build report per directive.
+
+#### B2 path decision (post-blocker):
+Encoder = adapt exllamav3's PUBLIC trellis quantizer (SparkRing's exl3-r7 proves
+the family on GB10) to emit SQG/MCG codewords into BTX atoms; inverse-of-intrinsics
+from scratch rejected (decode law lives in CUTLASS/PTX). Uniform-K2 sqg_e4m3 is the
+production-qualified structure if mixed P44/P33 planning stays fail-closed.
