@@ -68,6 +68,21 @@ K4 (hot) and K3 (cold). No curation.
 
 - [x] a. vendored (commit d52b94f)
 - [x] b. this document
-- [ ] c. one-pair end-to-end encode
-- [ ] d. round-trip error metric
-- [ ] e. batch harness (only if d green)
+- [x] c. encode path PROVEN at tile level on REAL checkpoint weights
+      (expert 0 down_proj/gate_proj, layer 5, gx10-1 pair copied to Mac 26MB;
+       compressed-tensors unpack semantics from helpers.py unpack_from_int32:
+       LSB-first nibbles, signed offset -8, symmetric g128 scales)
+- [x] d. round-trip metric RECORDED VERBATIM (K=4 naive greedy, no transforms):
+      gate_proj tiles n=8: relF p50 0.3799 mean 0.4062 worst 0.4942,
+        maxAbsErr p50 0.0335 worst 0.0519 (orig units), scale p50 69.9
+      down_proj tiles n=8: relF p50 0.4456 mean 0.4576 worst 0.5381,
+        maxAbsErr p50 0.0437 worst 0.0835, scale p50 74.1
+      gaussian sanity tile (no outliers): relF 0.27
+      MCG LUT property: 65536 windows -> 2585 distinct values, range +-3.997,
+      empty bands near +-3.5 and +-2.5 (staircase structure)
+      Gap vs serving-grade = exactly the mapped reuse items: Hadamard
+      pre-transform (outlier spreading), LDLQ ordering, beam>greedy, g_scale -
+      all present in vendored exllamav3 pipeline, none yet ported.
+- [ ] e. batch harness: designable tonight, NOT launched - full-matrix encode
+      at current CPU throughput is ~hours/matrix and the quality levers above
+      change the numbers anyway; run it after those land
