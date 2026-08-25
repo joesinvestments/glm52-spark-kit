@@ -118,5 +118,33 @@ def main():
           "(keys, bf16 aux [T,HID*5], weights_only-loadable, cap-*.pt glob)")
 
 
+
+
+def extract_guard():
+    tree = ast.parse(OVERLAY.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "dspark_capture_should_save":
+            ns = {"__builtins__": __builtins__}
+            exec(compile(ast.Module([node], type_ignores=[]),
+                         str(OVERLAY), "exec"), ns)
+            return ns["dspark_capture_should_save"]
+    raise AssertionError("guard not found")
+
+
+def test_min_t_guard_semantics():
+    g = extract_guard()
+    base = dict(capture_dir="/x", dummy_run=False, num_target_tokens=100,
+                capture_idx=50, capture_every=50)
+    assert g(**base) is True                      # boundary: fires at multiple
+    assert g(**{**base, "num_target_tokens": 48}) is False   # below rig floor
+    assert g(**{**base, "num_target_tokens": 64}) is True    # exactly at floor
+    assert g(**{**base, "capture_idx": 51}) is False         # off-multiple
+    assert g(**{**base, "dummy_run": True}) is False         # never during capture
+    assert g(**{**base, "capture_dir": ""}) is False         # disarmed
+    assert g(**{**base, "capture_every": 0}) is True         # no div-zero, ==every-1
+    print("[PASS] min-T guard semantics")
+
+
 if __name__ == "__main__":
     main()
+    test_min_t_guard_semantics()

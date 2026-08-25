@@ -28,6 +28,23 @@ from vllm.v1.worker.utils import AttentionGroup
 
 logger = init_logger(__name__)
 
+def dspark_capture_should_save(
+    *, capture_dir: str, dummy_run: bool, num_target_tokens: int,
+    capture_idx: int, capture_every: int, min_t: int = 64,
+) -> bool:
+    """Gate for one capture save (pure, unit-testable).
+
+    min_t=64 mirrors the training rig's hard loader floor
+    (max(64, MIN_A+K+2)): files below it are silently discarded by the rig,
+    so capturing them wastes I/O. Organic decode steps at C16 are ~48 tokens;
+    without this guard most captures would be unusable."""
+    if not capture_dir or dummy_run or num_target_tokens < min_t:
+        return False
+    return capture_idx % max(1, capture_every) == 0
+
+
+
+
 def dspark_build_capture_payload(
     aux_hidden_states: list,
     input_ids,
@@ -466,13 +483,18 @@ class DFlashSpeculator(DraftModelSpeculator):
             hidden_states = last_hidden_states
         self.hidden_states[:num_target_tokens].copy_(hidden_states[:num_target_tokens])
 
-        if self._capture_dir and not dummy_run and num_target_tokens > 0:
+        if dspark_capture_should_save(
+            capture_dir=self._capture_dir, dummy_run=dummy_run,
+            num_target_tokens=num_target_tokens,
+            capture_idx=self._capture_idx + 1,
+            capture_every=self._capture_every,
+        ):
             # Speculator-finetune data: the RAW per-layer target aux hiddens
             # (pre draft-projection - the draft's own trainable combine must
             # not be baked in), token ids from the target batch, absolute
             # positions. bf16, rank 0 only (TP-identical).
             self._capture_idx += 1
-            if aux_hidden_states and self._capture_idx % self._capture_every == 0:
+            if aux_hidden_states:
                 try:
                     import time as _time
 
