@@ -28,6 +28,35 @@ from vllm.v1.worker.utils import AttentionGroup
 
 logger = init_logger(__name__)
 
+def dspark_build_capture_payload(
+    aux_hidden_states: list,
+    input_ids,
+    positions,
+    num_target_tokens: int,
+) -> dict:
+    """Build one DSpark finetune capture record (pure torch, unit-testable).
+
+    Contract (dspark-training/dspark_finetune.py loader): dict with
+      aux       [T, HID*n_layers] bf16 - RAW per-layer target aux hiddens,
+                concatenated feature-wise, pre draft-projection
+      input_ids [T] int
+      positions [T] int
+    Saved as cap-<epoch_ms>-<idx>.pt by the hook below (rank 0 only).
+    """
+    return {
+        "aux": torch.cat(
+            [a[:num_target_tokens].detach() for a in aux_hidden_states],
+            dim=-1,
+        )
+        .to(torch.bfloat16)
+        .cpu(),
+        "input_ids": input_ids[:num_target_tokens].detach().cpu(),
+        "positions": positions[:num_target_tokens].detach().cpu(),
+    }
+
+
+
+
 
 class DFlashSpeculator(DraftModelSpeculator):
     _speculator_name = "DFlash"  # For logging, so we can share methods with subclasses
@@ -447,23 +476,12 @@ class DFlashSpeculator(DraftModelSpeculator):
                 try:
                     import time as _time
 
-                    payload = {
-                        "aux": torch.cat(
-                            [
-                                a[:num_target_tokens].detach()
-                                for a in aux_hidden_states
-                            ],
-                            dim=-1,
-                        )
-                        .to(torch.bfloat16)
-                        .cpu(),
-                        "input_ids": input_batch.input_ids[:num_target_tokens]
-                        .detach()
-                        .cpu(),
-                        "positions": self.context_positions[:num_target_tokens]
-                        .detach()
-                        .cpu(),
-                    }
+                    payload = dspark_build_capture_payload(
+                        aux_hidden_states,
+                        input_batch.input_ids,
+                        self.context_positions,
+                        num_target_tokens,
+                    )
                     torch.save(
                         payload,
                         f"{self._capture_dir}/cap-{int(_time.time()*1000)}"
