@@ -1,0 +1,35 @@
+# b3-successor: new-tree serving candidate for D2 parity (Window 3 boot).
+# Base identical to production lineage; kit overlays BAKED EXCEPT b12x-coupled
+# (kit-light, PATCHSET=b3 semantics); collab patch 001 only (battery-clean);
+# THE delta vs b3: overlay b12x_mla_sparse.py carries the NEW-TREE imports
+# (b12x.attention.*) - this file comes from the synced kit working tree.
+FROM vllm-b12x:v0.27.0-pinned
+ARG B12X_REF=36bce2c15
+ARG DSL_VER=4.6.2
+RUN pip install --no-cache-dir --no-deps --no-build-isolation --force-reinstall \
+      "https://github.com/local-inference-lab/b12x/archive/${B12X_REF}.tar.gz" \
+ && pip install --no-cache-dir --no-deps "nvidia-cutlass-dsl==${DSL_VER}" \
+ && pip install --no-cache-dir "ray[cgraph]==2.47.1" \
+ && python3 -c "import importlib.metadata as m; print('b12x', m.version('b12x'), 'cutlass-dsl', m.version('nvidia-cutlass-dsl'), 'ray', m.version('ray'))"
+
+COPY kit/ /glm52-kit/
+COPY patches/ /glm52-patches/
+ENV BAKE_SKIP="b12x/"
+RUN python3 /glm52-kit/bake_overlays.py && rm -rf /glm52-kit
+
+# Collab patch 001 (index-share diagnostic log) - parity with production lineage.
+RUN V=/usr/local/lib/python3.12/dist-packages  && cd "$V"  && patch -p1 --dry-run < /glm52-patches/001-index-share-engagement-log.patch  && patch -p1 < /glm52-patches/001-index-share-engagement-log.patch  && rm -rf /glm52-patches
+
+# Lane-3 rewritten overlay rides inside kit overlays (MANIFEST path
+# vllm/v1/attention/backends/mla/b12x_mla_sparse.py) - verify it survived the bake
+# with the NEW import path, then the IMPORT GATE: both new-tree API homes resolve.
+RUN V=/usr/local/lib/python3.12/dist-packages \
+ && grep -q "b12x.attention._shared.mla.api" \
+      "$V/vllm/v1/attention/backends/mla/b12x_mla_sparse.py" \
+ && python3 -c "
+from b12x.attention._shared.mla.api import (
+    sparse_mla_decode_forward, sparse_mla_extend_forward)
+from b12x.attention.sparse_mla._scratch import (
+    B12XSparseMLAScratchCaps, plan_sparse_mla_scratch)
+print('b7 import gate OK: new-tree MLA front doors resolve')" \
+ && python3 -c "import vllm.config.compilation; print('vllm import OK')"
