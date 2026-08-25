@@ -89,3 +89,47 @@ ACTION: reverted to k=2/[3,6,9,12] stable identity.
 - gx10-bench-optimizer: battery_probe.py + docs/BATTERY-METHOD.md (9 rules)
 - QuantTrio repo: docs/CAMPAIGN-BATTERY-2026-08-24.md (baseline + falsification)
 All pushed to main under operator authorship.
+
+### 2026-08-25 (build-directive session): four builds launched
+Directive: collab-work/claude_to_agent_glm_build_directive_20260824.md supersedes
+measurement-first framing. Four builds in parallel; measurement only as acceptance gates.
+
+#### B1 DONE: glm52-collab:b3 built clean and staged on gx10-1
+new-b12x 1.2.6 @ verified pin 36bce2c15 | cutlass-dsl 4.6.2 | ray[cgraph]==2.47.1
+(root-cause-#5 pin carried into build args) | 33 kit overlays baked, 2 skipped
+(b12x-coupled, kit-light mode), 2 md5-drift warnings = known HEAD-ahead files.
+Collab patch 001 only (no profiler -> battery-clean boot candidate).
+BTX machinery VERIFIED IN-IMAGE: b12x/moe/_shared/{btx_schema,trellis_codebooks,
+btx_synth,btx_compat,mixed_trellis,w4a8_trellis_decode}. Import smoke PASS.
+NOTE: upstream b12x moved past our pin (HEAD 9ae32e297 today, EXL3-MCG work);
+staying on 36bce2c15 - it is what the campaign verified and what B2 tooling targets.
+
+#### B2 BLOCKER NAMED (corrects DESIGN.md v2): no real-weight trellis encoder exists upstream
+Source-audited at pin 36bce2c15: prepare.py prepare_trellis256_moe_weights with real
+tensors is a ZERO-COPY WRAP path ("no bytes copied or permuted"); write_btx_checkpoint
+is SYNTH-only (random payloads). No encode path ships anywhere in-tree; the decode law
+lives in CUTLASS intrinsics (packed_decode_sqg_xor_cheb_t12_to_e4m3x8,
+packed_decode_trellis_sqg_direct_lut, trellis_ring lane geometry). DESIGN.md v2's
+"encode step ... using upstream prepare paths" assumption is WRONG - that was the
+whole S3a plan. Real-payload BTX needs an encoder built from scratch OR adapted from
+exllamav3's public trellis quantizer (SparkRing's exl3-r7 proves that family runs on
+GB10). Additional format fact for boot planning (docs/btx-checkpoint-format.md):
+per_expert_pair sets containing P44 are DECLARED, UNFUSED - single-launch planning
+fails closed; vehicles are two serial launches or mixed_trellis benchmark kernel;
+{P33,P43}/{P33,P24} execute through expert-static dispatch; uniform coupled K2 sqg_e4m3
+is THE production-qualified structure. Weights located: gx10-1
+/var/tmp/glm-legacy/hf/hub/glm52-quanttrio-unpruned (380G, 129 shards,
+compressed-tensors pack-quantized; H6144 I2048 E256 x78 layers).
+
+#### B4 STAGED: spark_transport vendored verbatim
+campaign-2026-08/sircl/{LICENSE,NOTICE,THIRD_PARTY_NOTICES,UPSTREAM.md} +
+upstream/ (29 files byte-exact) @ sparkring commit 3a60ca71 + port/PORTING-NOTES.md
+(11 source-study facts incl.: raw ibverbs not rdma_cm so our event-8 stall has no
+analog; gid_index 3 already default; traffic_class must be ADDED in RTR; XOR-matchings
+pair-sum valid on switched fabric as-is; one QP per peer; fatal failure contract;
+CPU affinity contract vs GB10 10 cores).
+
+#### Background: GSM8K salvage chain running detached
+Baseline (1319 items conc 30) then --compare-baseline noise-floor run, chained via
+results/gsm8k-salvage.log driver; resumes from .resume.json if interrupted.
+Status reports with first build progress report per directive.
