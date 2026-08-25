@@ -652,11 +652,11 @@ class B12xMLASparseImpl(SparseMLACommonImpl[B12xMLASparseMetadata]):
         self._max_batched = int(max_batched)
 
         # Lazily import b12x only on this opt-in path.
-        from b12x.integration.mla import (
+        from b12x.attention._shared.mla.api import (
             sparse_mla_decode_forward,
             sparse_mla_extend_forward,
         )
-        from b12x.integration.sparse_mla_scratch import (
+        from b12x.attention.sparse_mla._scratch import (
             B12XSparseMLAScratchCaps,
             plan_sparse_mla_scratch,
         )
@@ -684,14 +684,10 @@ class B12xMLASparseImpl(SparseMLACommonImpl[B12xMLASparseMetadata]):
             # ScaleFormat so the scratch planner sizes for the 368 B record;
             # omit both for fp8_ds_mla so the caps stay constructible on a
             # stock (pre-nvfp4-port) b12x tree.
-            caps_kwargs: dict[str, Any] = (
-                {}
-                if self._b12x_scale_format is None
-                else {
-                    "kv_cache_dtype": self.kv_cache_dtype,
-                    "scale_format": self._b12x_scale_format,
-                }
-            )
+            # NEW-TREE PORT (36bce2c15): kv_cache_dtype/scale_format moved OUT of
+            # caps - scale threading happens per-forward-call via
+            # _b12x_nvfp4_kwargs(); caps carry geometry only (+ kv_dtype default).
+            caps_kwargs: dict[str, Any] = {}
             return plan_sparse_mla_scratch(
                 B12XSparseMLAScratchCaps(
                     device=self.device,
