@@ -24,7 +24,7 @@ uncredited or miscredited, open an issue and it gets fixed first, argued never.
 | NVIDIA | NCCL portions inside the vendored SIRCL patches; modelopt NVFP4 GLM-5.2 checkpoint | campaign-2026-08/sircl/spark_transport/nccl/; weights | Apache-2.0 / model license | https://github.com/NVIDIA/nccl |
 | QuantTrio | GLM-5.2 Int4-Int8Mix unpruned checkpoint (the production weights) | served weights | model license | HuggingFace: QuantTrio |
 | brandonmusic | GLM-5.2 EXL3 3.5-bpw quant (referenced in campaign comparisons; staged for evaluation) | campaign records | model license | HuggingFace: brandonmusic |
-| exllamav3 project | trellis quantizer identified as the adaptation path for the BTX encode pipeline (no code vendored yet; this row updates when any is) | campaign-2026-08/tailquant/ design docs | MIT | https://github.com/turboderp-org/exllamav3 |
+| exllamav3 project | trellis quantizer VENDORED (modules/quant + ext quant sources, MIT LICENSE verbatim) as the B2 encode-path base | campaign-2026-08/tailquant/vendor/exllamav3/ | MIT | https://github.com/turboderp-org/exllamav3 |
 
 Every Apache-2.0 subtree vendored here keeps its upstream LICENSE and NOTICE
 files in place, per Apache-2.0 section 4. Nothing in this table transfers
