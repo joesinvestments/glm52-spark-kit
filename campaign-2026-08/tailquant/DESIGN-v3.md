@@ -105,3 +105,18 @@ sqg_xor_cheb_t12_direct_lut_cpu() - candidate state machines verify without GPU.
 K2 constraint note: mcg supports K3-K6 only => K2 MUST be sqg_e4m3 (no mcg shortcut).
 Coupled-vs-uncoupled: production-QUALIFIED is coupled K2; uncoupled acceptance by
 reader/planning unverified - second open item, same oracle bootstraps the check.
+
+## LANE-2 ACCEPTANCE REFRAME (2026-08-25, Joe-endorsed)
+Two-sided acceptance for the uniform-K2 encoder, both halves required:
+1. VALUE side (proven): round-trip decode returns correct numbers (P1c/d).
+2. LAYOUT side (pending): bytes accepted by upstream chain - synth-writer layout +
+   extents + manifest + fused PLANNER pass at container scale. A5 proved a
+   value-correct container can still be refused by planning (mixed kinds).
+Corollary recorded: "uniform-K2 passes planning" remains an INFERENCE from A5's
+rejection message structure, not a demonstrated pass. The oracle run's FIRST output =
+demonstrate uniform-K2 planning PASS (or fail-closed reshape) BEFORE the 380G grind is
+too deep to cheaply redirect.
+Gate flag: prepare chain needs b3 kernel import chain => one CPU-only container on
+gx10-1 (--gpus none, MemAvailable-gated, bounded minutes, synth-scale input), purpose-
+limited to uniform-planning confirmation + oracle capture. AWAITING JOE'S WORD -
+standing rule keeps node actions gated; all oracle inputs prepared locally meanwhile.
