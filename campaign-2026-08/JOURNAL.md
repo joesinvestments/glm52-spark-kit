@@ -195,3 +195,18 @@ Post-reboot checklist executed on gx10-1: earlyoom/watchdog disabled+inactive (v
 not just assumed), dead vllm_slot container record removed, /tmp/btx-* partials deleted
 (3.9GB), drop_caches done, 117G mem free, 42G disk free. gx10-2/3/4 verified healthy,
 earlyoom/watchdog inactive everywhere. Awaiting GO for FORCE_RELAUNCH production boot.
+
+### 2026-08-25 (post-incident, standing down): corrections absorbed, B2 toy probe ready
+- CAMPAIGN-STATE corrected: earlyoom/watchdog protection is STRUCTURAL via
+  fleet_disarm.sh masking - no per-boot hand re-verification needed (6f7d9e7).
+- Fleet stood down per operator: relaunch was already in flight (pid 40666);
+  agent performed zero fleet actions after the order.
+- B2 de-risk DOWNSIZED per incident policy: tailquant/probe_btx_mixed_toy.py
+  (toy E8/H256/I256 geometry, 655KB container vs 4.2GB before; portable
+  MemAvailable gate fail-closed at 8GiB default, env-overridable OFF-fleet only).
+  Local CPU run: [synth] OK mixed P44/P33 per_expert_pair, [load] manifest
+  parsed + extent validated. [prepare] stage requires b12x kernel import chain
+  (cuda.bindings, Linux-only) -> runs inside glm52-collab:b3 WHEN AND WHERE
+  operator approves; exact-error capture is its purpose there.
+- GSM8K chain: paused cleanly pre-recovery, .resume.json intact, resumes on
+  operator's production-verified signal.
