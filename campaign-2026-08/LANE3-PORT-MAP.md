@@ -47,3 +47,25 @@ NEW (source-verified same names, new homes):
 b3-successor image build with rewritten overlay -> import-chain clean -> unit/shape
 tests green (upstream tests/attention/* run CPU-side where possible) -> parity-boot
 window request.
+
+## AUDIT COMPLETE (2026-08-25 late): the port COLLAPSED to ~4 lines
+
+Full signature audit vs our overlay's actual call sites:
+1. Import paths: 2 lines (the only dead code). Same function names, new modules.
+2. Caps construction: DELETE kv_cache_dtype= and scale_format= from caps_kwargs
+   (moved to forward kwargs; our _b12x_nvfp4_kwargs(latent_scale) ALREADY threads
+   scale_format per-call - written for this API generation).
+3. Plan.bind(): signature IDENTICAL to our call sites INCLUDING scratch= caller-owned
+   storage (matches workspace-manager get_simultaneous pattern verbatim).
+   B12XSparseMLAScratch exposes all duck-typed fields (tmp_output/tmp_lse/
+   output_buffer/final_lse/num_chunks_ptr/set_split_chunk_config).
+4. Forward contracts: keyword-only binding/kv_cache/sm_scale/v_head_dim/
+   forced_num_splits/return_lse/lse_scale("natural")/scale_format/fp8_rope -
+   ALL present with same semantics. Returns Tensor|tuple matching our lse handling.
+   fp8_rope param exists (production runs KV_FP8_ROPE=1).
+
+CONSEQUENCE: the "days-class D2 port" estimate was wrong in OUR FAVOR - the overlay was
+already authored against this API generation (binding-based plan/bind/run); window-1's
+A1 failure was purely the stale import paths. Remaining D2 scope = b3-successor image
+build with rewritten overlay + import gate + shape tests, then parity boot where the
+GLM_NSA 1.2-1.6x claim gets verified. Rewrite itself: trivial, next work block.
