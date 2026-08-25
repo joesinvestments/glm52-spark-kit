@@ -202,8 +202,12 @@ profiler-armed boot must carry a battery.
 
 - Production restart procedure: stop vllm_slot containers fleet-wide,
   pkill -9 -f "VLLM::", drop caches, FORCE_RELAUNCH=1 resolve_gid_and_launch.sh.
-- earlyoom/watchdog MUST stay disabled; check after every node reboot
-  (they re-enable themselves via systemd presets).
+- earlyoom/watchdog MUST stay disabled; they are MASKED fleet-wide by
+  spark-fleet-guard/node/fleet_disarm.sh (`systemctl mask`, idempotent), which
+  is structural - presets cannot resurrect a masked unit, so no per-boot
+  hand re-check is needed (correction 2026-08-25: earlier text implied manual
+  re-verification after every reboot; that was redundant with the mask).
+  Re-run fleet_disarm.sh only when un-masking is deliberate.
 - Probes persist in ~/probes/ on gx10-1 (probe.py, correctness_probe.py with
   MODEL patched to glm-5.2-quanttrio).
 - Battery command: python3 ~/probes/probe.py --endpoint http://127.0.0.1:8210
