@@ -1,0 +1,9 @@
+{
+ "artifact": "accuracy_gsm8k_glm52-dcp2_20260825-140817.json",
+ "role": "P0 BASELINE (run 1 of 2)",
+ "boot_identity": "k4+ladder[3,6,9,12] HYBRID (win1 restore defect, labeled incumbent)",
+ "items": 1319,
+ "correct": 1284,
+ "exact_rate": 0.97346,
+ "note": "baseline for McNemar vs candidate arms + noise-floor reference"
+}
