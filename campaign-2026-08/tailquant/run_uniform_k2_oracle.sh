@@ -6,7 +6,13 @@
 # (408KB each), MemAvailable fail-closed gate, bounded minutes, production untouched.
 set -Eeuo pipefail
 
-MEM_FLOOR_GIB=8
+# Floor 2 GiB (amended from draft's 8): this run RIDES ALONGSIDE SERVING by design
+# (Joe-approved passenger); serving state holds MemAvailable at 3-5 GiB indefinitely,
+# so an 8 GiB floor could never pass without defeating the rider purpose. Workload
+# footprint is one CPU torch process <1 GB RSS on KB-scale tensors - fail-closed
+# retained, threshold right-sized to the bounded allocation (incident lesson applied:
+# the wedge came from an UNBOUNDED multi-GB alloc, not from small gated work).
+MEM_FLOOR_GIB=2
 SRV=gx10-1
 IMAGE=glm52-collab:b3
 SRC="${BASH_SOURCE[0]%/*}/oracle-inputs"   # repo: campaign-2026-08/tailquant/oracle-inputs
@@ -26,8 +32,8 @@ cat > /tmp/lane2_prepare_probe.py << 'PYEOF'
 import json, pathlib, sys
 sys.path.insert(0, ".")
 import torch
-from b12x.moe._shared.btx_schema import read_btx_manifest, BTX_MANIFEST_FILENAME
 from b12x.moe._shared.kernels.w4a16 import btx as btx_mod
+from b12x.moe._shared.kernels.w4a16.btx import read_btx_manifest
 
 results = {}
 for variant in ("uncoupled", "coupled"):
