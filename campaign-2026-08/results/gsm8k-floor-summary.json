@@ -1,0 +1,13 @@
+{
+ "artifact": "accuracy_gsm8k_glm52-dcp2_20260825-192051.json",
+ "role": "P0 NOISE FLOOR (run 2 of 2, --compare-baseline)",
+ "items": 1319,
+ "correct": 1288,
+ "exact_rate": 0.9765,
+ "baseline_correct": 1284,
+ "candidate_correct": 1288,
+ "flips_baseline_only": 6,
+ "flips_candidate_only": 10,
+ "mcnemar_exact_p": 0.4545,
+ "noise_floor_verdict": "run-to-run swing 4 net correct / 16 discordant / p=0.45 => floor ~ +-1.2pp; arms must beat p<0.05"
+}
